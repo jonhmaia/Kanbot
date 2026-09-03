@@ -6,6 +6,8 @@ import { api } from '../lib/api';
 
 import { useApp } from '../context/AppContext';
 import AtmospherePicker from '../components/settings/AtmospherePicker';
+import IslandPrefsCard from '../components/settings/IslandPrefsCard';
+import PomodoroCard from '../components/settings/PomodoroCard';
 import McpCard from '../components/settings/McpCard';
 
 export default function SettingsPage() {
@@ -33,6 +35,9 @@ export default function SettingsPage() {
               <AtmospherePicker />
             </div>
           </Card>
+
+          <IslandPrefsCard />
+          <PomodoroCard />
 
           <McpCard />
 

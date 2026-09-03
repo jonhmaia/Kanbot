@@ -2,5 +2,9 @@
   "identifier": "default",
   "description": "Janela principal e ilha do Kanbot",
   "windows": ["main", "island"],
-  "permissions": ["core:default", "desktop"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "desktop"
+  ]
 }

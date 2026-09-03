@@ -7,5 +7,7 @@ commands.allow = [
   "quit_app",
   "position_island",
   "resize_island",
+  "start_drag_island",
+  "snap_island",
   "open_chat"
 ]

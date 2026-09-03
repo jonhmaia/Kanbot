@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import TaskCard from './TaskCard';
 import { IconDots, IconPlus } from '../../lib/icons';
+import { useFocus } from '../../context/FocusContext';
 
 /**
  * Renderizador de kanban compartilhado pelos tres contextos:
@@ -22,8 +23,19 @@ export default function BoardCanvas({
   sameColumn,
   emptyHint = 'Nenhuma tarefa aqui.',
 }) {
+  const { startFocus } = useFocus();
   const [drag, setDrag] = useState(null); // { task }
   const [target, setTarget] = useState(null); // { columnId, index }
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const selectedTasks = useMemo(
+    () => columns.flatMap((column) => column.tasks).filter((task) => selectedIds.includes(task.id)),
+    [columns, selectedIds],
+  );
+
+  const toggleSelect = (task) => {
+    setSelectedIds((ids) => (ids.includes(task.id) ? ids.filter((id) => id !== task.id) : [...ids, task.id]));
+  };
 
   const resolveDrop =
     dropTarget ?? ((column) => (mode === 'master' ? { statusKey: column.statusKey } : { columnId: column.id }));
@@ -42,7 +54,8 @@ export default function BoardCanvas({
   };
 
   return (
-    <div className="scroll-slim flex h-full gap-4 overflow-x-auto pb-4">
+    <div className="relative h-full">
+    <div className="scroll-slim flex h-full gap-4 overflow-x-auto pb-16">
       {columns.map((column) => {
         const overLimit = column.wipLimit != null && column.tasks.length > column.wipLimit;
         const isTargetCol = target?.columnId === column.id;
@@ -127,12 +140,15 @@ export default function BoardCanvas({
                     task={task}
                     showProject={showProjectBadge}
                     dragging={drag?.task.id === task.id}
+                    selected={selectedIds.includes(task.id)}
                     onDragStart={(t) => setDrag({ task: t })}
                     onDragEnd={() => {
                       setDrag(null);
                       setTarget(null);
                     }}
                     onOpen={onOpenTask}
+                    onToggleSelect={toggleSelect}
+                    onStartFocus={startFocus}
                   />
                 </div>
               ))}
@@ -168,6 +184,27 @@ export default function BoardCanvas({
           </span>
           <span className="text-[12.5px]">Nova coluna</span>
         </button>
+      )}
+    </div>
+      {selectedTasks.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-line bg-[#141415]/92 px-3 py-2 shadow-lift backdrop-blur-2xl">
+            <span className="px-1 text-[12.5px] text-chalk/90">{selectedTasks.length} selecionadas</span>
+            <button
+              type="button"
+              onClick={() => {
+                startFocus(selectedTasks);
+                setSelectedIds([]);
+              }}
+              className="btn-primary !px-3 !py-1.5"
+            >
+              Iniciar foco
+            </button>
+            <button type="button" onClick={() => setSelectedIds([])} className="btn-ghost !px-3 !py-1.5">
+              Limpar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

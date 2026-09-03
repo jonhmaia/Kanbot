@@ -202,6 +202,31 @@ export const IconClock = (p) => (
   </Svg>
 );
 
+export const IconPlay = (p) => (
+  <Svg {...p}>
+    <path d="M8 6.5v11l10-5.5-10-5.5Z" />
+  </Svg>
+);
+
+export const IconPause = (p) => (
+  <Svg {...p}>
+    <path d="M8 6h3v12H8zM13 6h3v12h-3z" />
+  </Svg>
+);
+
+export const IconFlame = (p) => (
+  <Svg {...p}>
+    <path d="M12 3.5s2.2 3.4 2.2 6.1A2.2 2.2 0 1 1 9.6 8C8 10.2 7 12.2 7 14.2a5 5 0 0 0 10 0c0-3.4-2.4-6.4-5-10.7Z" />
+  </Svg>
+);
+
+export const IconList = (p) => (
+  <Svg {...p}>
+    <path d="M9 7h11M9 12h11M9 17h11" />
+    <path d="M5 7h.01M5 12h.01M5 17h.01" />
+  </Svg>
+);
+
 export const IconChat = (p) => (
   <Svg {...p}>
     <path d="M20 12.5c0 3.6-3.6 6.5-8 6.5a9.6 9.6 0 0 1-2.6-.35L4.5 20.5l1.1-3.3A6.2 6.2 0 0 1 4 12.5C4 8.9 7.6 6 12 6s8 2.9 8 6.5Z" />

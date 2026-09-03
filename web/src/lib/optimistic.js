@@ -47,6 +47,7 @@ export function mergeTask(task, payload, members = [], column) {
     labels: payload.labels || task.labels,
     dueDate: payload.dueDate !== undefined ? payload.dueDate : task.dueDate,
     estimateHours: payload.estimateHours != null ? Number(payload.estimateHours) : task.estimateHours,
+    loggedHours: payload.loggedHours != null ? Number(payload.loggedHours) : task.loggedHours,
     progress: payload.progress != null ? Number(payload.progress) : task.progress,
     columnId: payload.columnId || task.columnId,
     columnName: column?.name || task.columnName,

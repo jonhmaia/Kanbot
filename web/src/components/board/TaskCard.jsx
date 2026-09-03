@@ -1,5 +1,5 @@
 import { Avatar } from '../ui/Primitives';
-import { IconChat, IconClock, IconPaperclip } from '../../lib/icons';
+import { IconChat, IconClock, IconPaperclip, IconPlay } from '../../lib/icons';
 import { PRIORITY_META, dueState, formatDate } from '../../lib/format';
 
 const DUE_STYLE = {
@@ -9,7 +9,18 @@ const DUE_STYLE = {
   none: 'text-smoke',
 };
 
-export default function TaskCard({ task, showProject = false, onOpen, onDragStart, onDragEnd, dragging, staticCard = false }) {
+export default function TaskCard({
+  task,
+  showProject = false,
+  onOpen,
+  onDragStart,
+  onDragEnd,
+  dragging,
+  staticCard = false,
+  selected = false,
+  onToggleSelect,
+  onStartFocus,
+}) {
   const priority = PRIORITY_META[task.priority] || PRIORITY_META.medium;
   const due = dueState(task.dueDate);
 
@@ -23,10 +34,18 @@ export default function TaskCard({ task, showProject = false, onOpen, onDragStar
         onDragStart?.(task);
       }}
       onDragEnd={staticCard ? undefined : onDragEnd}
-      onClick={() => onOpen?.(task)}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          onToggleSelect?.(task);
+          return;
+        }
+        onOpen?.(task);
+      }}
       className={
-        'group cursor-pointer select-none rounded-3xl border border-lineSoft bg-white/[0.045] p-3.5 backdrop-blur-md transition-all duration-200 hover:border-white/20 hover:bg-white/[0.075] ' +
-        (dragging ? 'opacity-35' : 'opacity-100')
+        'group cursor-pointer select-none rounded-3xl border bg-white/[0.045] p-3.5 backdrop-blur-md transition-all duration-200 hover:border-white/20 hover:bg-white/[0.075] ' +
+        (dragging ? 'opacity-35 ' : 'opacity-100 ') +
+        (selected ? 'border-amber/50 bg-amber/[0.07]' : 'border-lineSoft')
       }
     >
       <div className="flex items-start gap-2">
@@ -84,6 +103,21 @@ export default function TaskCard({ task, showProject = false, onOpen, onDragStar
             </span>
           )}
           <span className="text-[10.5px] tabular-nums">{task.estimateHours}h</span>
+          {onStartFocus && (
+            <button
+              type="button"
+              title="Iniciar foco"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartFocus([task]);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="grid h-6 w-6 place-items-center rounded-full border border-line bg-white/[0.05] text-dust opacity-0 transition hover:border-amber/50 hover:text-amber group-hover:opacity-100"
+              aria-label="Iniciar foco"
+            >
+              <IconPlay size={11} />
+            </button>
+          )}
         </div>
       </footer>
     </article>

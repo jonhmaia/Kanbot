@@ -15,6 +15,7 @@ import InsightsPage from './pages/InsightsPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import ChatDock from './components/ai/ChatDock';
+import FocusStatusBar from './components/focus/FocusStatusBar';
 import { ChatProvider } from './context/ChatContext';
 import { useApp } from './context/AppContext';
 
@@ -84,6 +85,7 @@ export default function App() {
           </Routes>
         </main>
         <ChatDock />
+        <FocusStatusBar />
         <Toast toast={toast} />
       </div>
     </ChatProvider>

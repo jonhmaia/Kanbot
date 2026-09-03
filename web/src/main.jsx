@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import IslandApp from './components/island/IslandApp';
 import { AppProvider } from './context/AppContext';
+import { FocusProvider } from './context/FocusContext';
 import './index.css';
 
 const isIsland = new URLSearchParams(window.location.search).has('island');
@@ -16,12 +17,16 @@ createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     {isIsland ? (
       <AppProvider>
-        <IslandApp />
+        <FocusProvider>
+          <IslandApp />
+        </FocusProvider>
       </AppProvider>
     ) : (
       <BrowserRouter>
         <AppProvider>
-          <App />
+          <FocusProvider>
+            <App />
+          </FocusProvider>
         </AppProvider>
       </BrowserRouter>
     )}

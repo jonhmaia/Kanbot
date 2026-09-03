@@ -607,6 +607,7 @@ export const api = {
     if (patch.assigneeId !== undefined) body.assignee_id = patch.assigneeId;
     if (patch.dueDate !== undefined) body.due_date = patch.dueDate;
     if (patch.estimateHours != null) body.estimate_hours = Number(patch.estimateHours);
+    if (patch.loggedHours != null) body.logged_hours = Number(patch.loggedHours);
     if (patch.progress != null) body.progress = Number(patch.progress);
     if (patch.columnId != null) body.column_id = patch.columnId;
     if (patch.position != null) body.position = patch.position;
