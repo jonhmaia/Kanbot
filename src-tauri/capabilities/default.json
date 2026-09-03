@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Janela principal e ilha do Kanbot",
+  "windows": ["main", "island"],
+  "permissions": ["core:default", "desktop"]
+}

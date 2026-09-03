@@ -1,0 +1,30 @@
+export const coverageSeries = [
+  { hour: '09:00', scheduled: 4, required: 4 },
+  { hour: '10:00', scheduled: 5, required: 4 },
+  { hour: '11:00', scheduled: 6, required: 5 },
+  { hour: '12:00', scheduled: 5, required: 7 },
+  { hour: '13:00', scheduled: 7, required: 7 },
+  { hour: '14:00', scheduled: 6, required: 5 },
+  { hour: '15:00', scheduled: 4, required: 6 },
+  { hour: '16:00', scheduled: 6, required: 5 },
+  { hour: '17:00', scheduled: 8, required: 8 },
+  { hour: '18:00', scheduled: 7, required: 9 },
+  { hour: '19:00', scheduled: 5, required: 6 },
+  { hour: '20:00', scheduled: 4, required: 4 },
+];
+
+export const forecastSeries = [
+  { hour: '08:00', value: 38 },
+  { hour: '09:00', value: 44 },
+  { hour: '10:00', value: 41 },
+  { hour: '11:00', value: 57 },
+  { hour: '12:00', value: 72 },
+  { hour: '13:00', value: 64 },
+  { hour: '14:00', value: 69 },
+  { hour: '15:00', value: 58 },
+  { hour: '16:00', value: 76 },
+  { hour: '17:00', value: 96 },
+  { hour: '18:00', value: 84 },
+  { hour: '19:00', value: 61 },
+  { hour: '20:00', value: 47 },
+];

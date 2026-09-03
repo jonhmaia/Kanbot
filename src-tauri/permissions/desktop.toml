@@ -1,0 +1,11 @@
+[[permission]]
+identifier = "desktop"
+description = "Comandos do app desktop Kanbot"
+commands.allow = [
+  "show_main",
+  "hide_main",
+  "quit_app",
+  "position_island",
+  "resize_island",
+  "open_chat"
+]

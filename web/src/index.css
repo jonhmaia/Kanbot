@@ -1,0 +1,224 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --bg-0: #4a4a52;
+    --bg-1: #3e3e44;
+    --bg-2: #313136;
+    --bg-3: #262629;
+    --bg-4: #1b1b1e;
+    --bg-5: #131315;
+  }
+
+  @property --bg-0 {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #4a4a52;
+  }
+  @property --bg-1 {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #3e3e44;
+  }
+  @property --bg-2 {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #313136;
+  }
+  @property --bg-3 {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #262629;
+  }
+  @property --bg-4 {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #1b1b1e;
+  }
+  @property --bg-5 {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #131315;
+  }
+
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    /* Gradiente diagonal da referencia: cinza claro no canto superior esquerdo
+       caindo para quase preto no inferior direito. `fixed` ancora o gradiente
+       no viewport — sem isso ele se estica pela altura total da pagina e
+       some. */
+    background-color: var(--bg-5);
+    background-image: radial-gradient(
+      150% 130% at 8% -8%,
+      var(--bg-0) 0%,
+      var(--bg-1) 10%,
+      var(--bg-2) 30%,
+      var(--bg-3) 55%,
+      var(--bg-4) 78%,
+      var(--bg-5) 100%
+    );
+    transition:
+      --bg-0 0.45s ease,
+      --bg-1 0.45s ease,
+      --bg-2 0.45s ease,
+      --bg-3 0.45s ease,
+      --bg-4 0.45s ease,
+      --bg-5 0.45s ease,
+      background-color 0.45s ease;
+    background-attachment: fixed;
+    color: #ededed;
+    font-family: 'Inter Tight', Inter, system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: rgba(245, 165, 36, 0.35);
+    color: #fff;
+  }
+}
+
+@layer components {
+  /* Superficie base de todos os cards do dashboard */
+  .card {
+    @apply relative rounded-4xl border border-line bg-panel shadow-card backdrop-blur-xl;
+  }
+
+  .card-quiet {
+    @apply relative rounded-4xl border border-lineSoft bg-white/[0.03] backdrop-blur-xl;
+  }
+
+  .card-title {
+    @apply text-[15px] font-medium tracking-tight text-chalk/90;
+  }
+
+  .metric {
+    @apply font-display text-[44px] leading-none tracking-[-0.04em] text-chalk;
+  }
+
+  .metric-label {
+    @apply text-[12px] leading-tight text-dust;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-white/[0.05] px-3 py-1.5 text-[11.5px] text-dust transition hover:border-white/20 hover:text-chalk;
+  }
+
+  .nav-item {
+    @apply relative rounded-full px-3.5 py-1.5 text-[13px] font-normal text-smoke transition-colors duration-200 hover:text-chalk;
+  }
+
+  .nav-item-active {
+    @apply bg-white/[0.09] text-chalk shadow-[inset_0_1px_0_rgba(255,255,255,0.07)];
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full text-[13px] font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-ghost {
+    @apply btn border border-line bg-white/[0.05] px-4 py-2 text-dust hover:border-white/20 hover:bg-white/[0.09] hover:text-chalk;
+  }
+
+  .btn-primary {
+    @apply btn bg-amber-btn px-5 py-2.5 text-[13px] font-semibold text-[#191100] shadow-amberGlow hover:brightness-110 active:brightness-95;
+  }
+
+  .btn-ice {
+    @apply btn bg-ice px-4 py-2 font-semibold text-[#0F2833] hover:brightness-105;
+  }
+
+  .input {
+    @apply w-full rounded-full border border-line bg-white/[0.04] px-4 py-2.5 text-[13px] text-chalk placeholder:text-smoke outline-none transition focus:border-white/25 focus:bg-white/[0.07];
+  }
+
+  .field {
+    @apply w-full rounded-2xl border border-line bg-white/[0.04] px-3.5 py-2.5 text-[13px] text-chalk placeholder:text-smoke outline-none transition focus:border-amber/50 focus:bg-white/[0.07];
+  }
+
+  .label {
+    @apply mb-1.5 block text-[11px] uppercase tracking-[0.14em] text-smoke;
+  }
+
+  .expand-btn {
+    @apply absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-line bg-white/[0.05] text-dust transition hover:border-white/25 hover:text-chalk;
+  }
+}
+
+@layer utilities {
+  .scroll-slim::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scroll-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-slim::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 99px;
+  }
+  .scroll-slim::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* textura listrada usada nas barras "sem dado / bloqueado" */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.24) 0px,
+      rgba(255, 255, 255, 0.24) 1.5px,
+      transparent 1.5px,
+      transparent 6px
+    );
+  }
+
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+}
+
+html.island,
+html.island body,
+html.island #root {
+  height: 100%;
+  background: transparent !important;
+  background-image: none !important;
+  background-color: transparent !important;
+  overflow: hidden;
+}
+
+html.island body {
+  transition: none;
+}
+
+.island-action {
+  @apply flex items-center justify-center gap-1.5 rounded-full px-2 py-2 text-[12px] text-dust transition hover:bg-white/[0.07] hover:text-chalk;
+}

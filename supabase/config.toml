@@ -1,0 +1,4 @@
+project_id = "nbjdaulggtcpldatilrt"
+
+[functions.kanbot-mcp]
+verify_jwt = false
