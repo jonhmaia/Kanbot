@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import DesktopUpdater from './components/desktop/DesktopUpdater';
 import IslandApp from './components/island/IslandApp';
 import { AppProvider } from './context/AppContext';
 import { FocusProvider } from './context/FocusContext';
@@ -25,6 +26,7 @@ createRoot(document.getElementById('root')).render(
       <BrowserRouter>
         <AppProvider>
           <FocusProvider>
+            <DesktopUpdater />
             <App />
           </FocusProvider>
         </AppProvider>

@@ -8,7 +8,13 @@ import AtmospherePicker from '../settings/AtmospherePicker';
 import { Avatar, Dropdown } from '../ui/Primitives';
 import { MenuPortal, useMenu } from '../ui/MenuPortal';
 import { relativeTime } from '../../lib/format';
-import { DEFAULT_TAB, parseTaskLocation, TASK_TABS, taskPath } from '../../lib/taskScope';
+import { DEFAULT_TAB, parseTaskLocation, taskPath } from '../../lib/taskScope';
+import ModuleTabs from './ModuleTabs';
+
+const NAV_PILL =
+  'flex items-center justify-center gap-0.5 rounded-full border border-lineSoft bg-white/[0.025] p-1 backdrop-blur-xl';
+const NAV_PILL_MOBILE =
+  'no-scrollbar flex items-center justify-center gap-1 overflow-x-auto rounded-full border border-lineSoft bg-white/[0.025] p-1 backdrop-blur-xl';
 
 function ProjectPicker() {
   const navigate = useNavigate();
@@ -127,22 +133,28 @@ function NotificationBell() {
   );
 }
 
-function ModuleTabs({ scope, className }) {
+function AppLinks({ inTasks, taskScope, className = '' }) {
   return (
-    <div className={className}>
-      {TASK_TABS.map((tab) => (
-        <NavLink
-          key={tab.id}
-          to={taskPath(scope, tab.id)}
-          end={tab.id === 'board'}
-          className={({ isActive }) =>
-            'nav-item shrink-0 border border-transparent ' + (isActive ? 'nav-item-active !border-line' : '')
-          }
-        >
-          {tab.label}
-        </NavLink>
-      ))}
-    </div>
+    <>
+      <NavLink
+        to={taskPath(taskScope, DEFAULT_TAB)}
+        className={() => 'nav-item shrink-0 ' + className + (inTasks ? ' nav-item-active' : '')}
+      >
+        Tarefas
+      </NavLink>
+      <NavLink
+        to="/focus"
+        className={({ isActive }) => 'nav-item shrink-0 ' + className + (isActive ? ' nav-item-active' : '')}
+      >
+        Foco
+      </NavLink>
+      <NavLink
+        to="/settings"
+        className={({ isActive }) => 'nav-item shrink-0 ' + className + (isActive ? ' nav-item-active' : '')}
+      >
+        Settings
+      </NavLink>
+    </>
   );
 }
 
@@ -156,30 +168,20 @@ export default function TopNav() {
 
   return (
     <header className="sticky top-0 z-30 px-5 pt-4 sm:px-7 sm:pt-5">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-4">
+        <div className="flex min-w-0 items-center gap-3">
           <IconLogo size={30} />
           <ProjectPicker />
         </div>
 
-        <nav className="hidden flex-1 items-center justify-center xl:flex">
-          <div className="flex items-center gap-0.5 rounded-full border border-lineSoft bg-white/[0.025] p-1 backdrop-blur-xl">
-            <NavLink
-              to={taskPath(taskScope, DEFAULT_TAB)}
-              className={() => 'nav-item ' + (inTasks ? 'nav-item-active' : '')}
-            >
-              Tarefas
-            </NavLink>
-            <NavLink
-              to="/settings"
-              className={({ isActive }) => 'nav-item ' + (isActive ? 'nav-item-active' : '')}
-            >
-              Settings
-            </NavLink>
-          </div>
-        </nav>
+        <div className="hidden flex-col items-stretch gap-2 xl:flex">
+          <nav className={NAV_PILL}>
+            <AppLinks inTasks={inTasks} taskScope={taskScope} />
+          </nav>
+          {inTasks && <ModuleTabs scope={activeScope} className={NAV_PILL} />}
+        </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="col-start-3 flex items-center justify-end gap-2.5">
           <button
             type="button"
             onClick={toggle}
@@ -210,33 +212,18 @@ export default function TopNav() {
         </div>
       </div>
 
-      <nav className="no-scrollbar mt-3 flex gap-1 overflow-x-auto xl:hidden">
-        <NavLink
-          to={taskPath(taskScope, DEFAULT_TAB)}
-          className={() =>
-            'nav-item shrink-0 border border-transparent ' + (inTasks ? 'nav-item-active !border-line' : '')
-          }
-        >
-          Tarefas
-        </NavLink>
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            'nav-item shrink-0 border border-transparent ' + (isActive ? 'nav-item-active !border-line' : '')
-          }
-        >
-          Settings
-        </NavLink>
-      </nav>
-
-      {inTasks && (
-        <nav className="mt-3 flex justify-center">
-          <ModuleTabs
-            scope={activeScope}
-            className="no-scrollbar flex gap-1 overflow-x-auto rounded-full border border-lineSoft bg-white/[0.025] p-1 backdrop-blur-xl xl:gap-0.5"
-          />
-        </nav>
-      )}
+      <div className="mt-3 flex justify-center xl:hidden">
+        <div className="flex min-w-0 max-w-full flex-col items-stretch gap-2">
+          <nav className={NAV_PILL_MOBILE}>
+            <AppLinks
+              inTasks={inTasks}
+              taskScope={taskScope}
+              className="border border-transparent"
+            />
+          </nav>
+          {inTasks && <ModuleTabs scope={activeScope} className={NAV_PILL_MOBILE} />}
+        </div>
+      </div>
     </header>
   );
 }

@@ -31,6 +31,7 @@ fn normalize_edge(edge: &str) -> &'static str {
 
 fn island_size(edge: &str, expanded: bool) -> (f64, f64) {
     match (normalize_edge(edge), expanded) {
+        ("top", false) if cfg!(target_os = "macos") => (200.0, 34.0),
         ("top", false) => (280.0, 52.0),
         ("top", true) => (520.0, 340.0),
         (_, false) => (52.0, 240.0),
@@ -48,6 +49,7 @@ fn place_island(window: &tauri::WebviewWindow, edge: &str) {
         return;
     };
     let pad = (8.0 * monitor.scale_factor()).round() as i32;
+    let top_pad = if cfg!(target_os = "macos") { 0 } else { pad };
     let (x, y) = match normalize_edge(edge) {
         "left" => (
             origin.x + pad,
@@ -59,7 +61,7 @@ fn place_island(window: &tauri::WebviewWindow, edge: &str) {
         ),
         _ => (
             origin.x + (screen.width as i32 - size.width as i32) / 2,
-            origin.y + pad,
+            origin.y + top_pad,
         ),
     };
     let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
@@ -179,6 +181,8 @@ fn open_chat(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if let Some(island) = app.get_webview_window("island") {
                 set_edge("top");

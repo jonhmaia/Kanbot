@@ -23,7 +23,7 @@ export default function BoardCanvas({
   sameColumn,
   emptyHint = 'Nenhuma tarefa aqui.',
 }) {
-  const { startFocus } = useFocus();
+  const { requestFocus } = useFocus();
   const [drag, setDrag] = useState(null); // { task }
   const [target, setTarget] = useState(null); // { columnId, index }
   const [selectedIds, setSelectedIds] = useState([]);
@@ -148,7 +148,7 @@ export default function BoardCanvas({
                     }}
                     onOpen={onOpenTask}
                     onToggleSelect={toggleSelect}
-                    onStartFocus={startFocus}
+                    onStartFocus={requestFocus}
                   />
                 </div>
               ))}
@@ -193,7 +193,7 @@ export default function BoardCanvas({
             <button
               type="button"
               onClick={() => {
-                startFocus(selectedTasks);
+                requestFocus(selectedTasks);
                 setSelectedIds([]);
               }}
               className="btn-primary !px-3 !py-1.5"

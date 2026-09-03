@@ -14,7 +14,9 @@ import TeamPage from './pages/TeamPage';
 import InsightsPage from './pages/InsightsPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import FocusHistoryPage from './pages/FocusHistoryPage';
 import ChatDock from './components/ai/ChatDock';
+import FocusSetupModal from './components/focus/FocusSetupModal';
 import FocusStatusBar from './components/focus/FocusStatusBar';
 import { ChatProvider } from './context/ChatContext';
 import { useApp } from './context/AppContext';
@@ -81,11 +83,13 @@ export default function App() {
             <Route path="/insights" element={<RedirectToTasks tab="insights" />} />
             <Route path="/reports" element={<RedirectToTasks tab="reports" />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/focus" element={<FocusHistoryPage />} />
             <Route path="*" element={<RedirectToTasks tab="reports" />} />
           </Routes>
         </main>
         <ChatDock />
         <FocusStatusBar />
+        <FocusSetupModal />
         <Toast toast={toast} />
       </div>
     </ChatProvider>

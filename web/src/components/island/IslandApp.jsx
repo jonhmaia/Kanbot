@@ -17,7 +17,7 @@ export default function IslandApp() {
     paused,
     idle,
     streak,
-    startFocus,
+    requestFocus,
     pause,
     resume,
     stop,
@@ -30,6 +30,7 @@ export default function IslandApp() {
   const loggedIn = Boolean(session);
   const accent = islandAccentColor(prefs.accent);
   const side = prefs.edge !== 'top';
+  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
 
   useEffect(() => {
     invokeDesktop('resize_island', { expanded: false, edge: prefs.edge });
@@ -169,7 +170,7 @@ export default function IslandApp() {
                     onClick={() => {
                       switchTask(task.id);
                       if (paused) resume();
-                      else if (idle) startFocus([task]);
+                      else if (idle) requestFocus([task]);
                     }}
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
                     style={{ background: active && running ? '#E5484D' : accent, color: '#111' }}
@@ -239,11 +240,11 @@ export default function IslandApp() {
       ? 'flex h-full w-full flex-row items-start gap-2 p-1.5'
       : prefs.edge === 'right'
         ? 'flex h-full w-full flex-row-reverse items-start gap-2 p-1.5'
-        : 'flex h-full w-full flex-col items-center pt-1.5';
+        : 'flex h-full w-full flex-col items-center ' + (isMac ? 'pt-0' : 'pt-1.5');
 
   return (
     <div className={'select-none ' + frame} onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      <div className={side ? 'h-full shrink-0' : expanded ? 'w-[504px]' : 'w-[268px]'}>{pill}</div>
+      <div className={side ? 'h-full shrink-0' : expanded ? 'w-[504px]' : 'w-full max-w-[268px]'}>{pill}</div>
       {panel}
     </div>
   );

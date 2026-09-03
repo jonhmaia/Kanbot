@@ -97,8 +97,41 @@ function ico(sizes) {
   return Buffer.concat([header, dir, ...images.map((image) => image.data)]);
 }
 
-writeFileSync(join(dir, '32x32.png'), png(32));
-writeFileSync(join(dir, '128x128.png'), png(128));
-writeFileSync(join(dir, '128x128@2x.png'), png(256));
+function icns(images) {
+  const parts = images.map(({ type, data }) => {
+    const header = Buffer.alloc(8);
+    header.write(type, 0, 4, 'ascii');
+    header.writeUInt32BE(8 + data.length, 4);
+    return Buffer.concat([header, data]);
+  });
+  const body = Buffer.concat(parts);
+  const head = Buffer.alloc(8);
+  head.write('icns', 0, 4, 'ascii');
+  head.writeUInt32BE(8 + body.length, 4);
+  return Buffer.concat([head, body]);
+}
+
+const png32 = png(32);
+const png128 = png(128);
+const png256 = png(256);
+const png512 = png(512);
+const png1024 = png(1024);
+
+writeFileSync(join(dir, '32x32.png'), png32);
+writeFileSync(join(dir, '128x128.png'), png128);
+writeFileSync(join(dir, '128x128@2x.png'), png256);
+writeFileSync(join(dir, 'icon.png'), png1024);
 writeFileSync(join(dir, 'icon.ico'), ico([16, 32, 48, 256]));
+writeFileSync(
+  join(dir, 'icon.icns'),
+  icns([
+    { type: 'ic07', data: png128 },
+    { type: 'ic08', data: png256 },
+    { type: 'ic09', data: png512 },
+    { type: 'ic10', data: png1024 },
+    { type: 'ic12', data: png256 },
+    { type: 'ic13', data: png512 },
+    { type: 'ic14', data: png1024 },
+  ]),
+);
 console.log('icons ok');

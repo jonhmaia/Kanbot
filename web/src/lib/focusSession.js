@@ -1,6 +1,9 @@
 export const FOCUS_KEY = 'kanbot:focus';
 export const FOCUS_DAYS_KEY = 'kanbot:focus-days';
 export const FOCUS_SETTINGS_KEY = 'kanbot:pomodoro';
+export const FOCUS_SETUP_KEY = 'kanbot:focus-setup';
+export const FOCUS_HISTORY_KEY = 'kanbot:focus-history';
+const HISTORY_LIMIT = 80;
 
 export const DEFAULT_POMODORO = {
   focusMin: 25,
@@ -17,10 +20,12 @@ export function emptyFocus() {
     endsAt: null,
     remainingMs: 0,
     startedAt: null,
+    sessionStartedAt: null,
     taskIds: [],
     tasks: [],
     currentTaskId: null,
     cycle: 0,
+    completedBlocks: [],
     settings: { ...DEFAULT_POMODORO },
   };
 }
@@ -43,6 +48,25 @@ export function readPomodoro() {
   } catch {
     return { ...DEFAULT_POMODORO };
   }
+}
+
+export function readFocusSetup() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FOCUS_SETUP_KEY) || 'null');
+    return Array.isArray(raw) ? raw.filter((task) => task?.id) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeFocusSetup(tasks) {
+  try {
+    if (!tasks?.length) localStorage.removeItem(FOCUS_SETUP_KEY);
+    else localStorage.setItem(FOCUS_SETUP_KEY, JSON.stringify(tasks));
+  } catch {
+    /* quota / private mode */
+  }
+  return tasks || [];
 }
 
 export function persistPomodoro(patch) {
@@ -136,6 +160,101 @@ export function streakCells(count = 35) {
     cells.push({ key, count: days[key] || 0 });
   }
   return cells;
+}
+
+export function readFocusHistory() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FOCUS_HISTORY_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeFocusHistory(entries) {
+  const list = (entries || []).slice(0, HISTORY_LIMIT);
+  try {
+    localStorage.setItem(FOCUS_HISTORY_KEY, JSON.stringify(list));
+  } catch {
+    /* quota / private mode */
+  }
+  return list;
+}
+
+export function clearFocusHistory() {
+  return writeFocusHistory([]);
+}
+
+export function archiveFocusSession(state, { reason = 'stopped', endedAt = Date.now() } = {}) {
+  if (!state || state.status === 'idle') return readFocusHistory();
+  const settings = state.settings || readPomodoro();
+  const blocks = Array.isArray(state.completedBlocks) ? state.completedBlocks : [];
+  const plannedMs = (settings.focusMin || 0) * 60 * 1000;
+  let partialMin = 0;
+  if (state.phase === 'focus' && (state.status === 'running' || state.status === 'paused' || state.status === 'transition')) {
+    const left = remainingMs({ ...state, status: state.status === 'running' ? 'running' : 'paused' }, endedAt);
+    partialMin = Math.max(0, Math.round(((plannedMs - left) / 60000) * 10) / 10);
+  }
+  const completedMin = blocks.reduce((sum, block) => sum + (Number(block.minutes) || 0), 0);
+  const focusMinutes = Math.round((completedMin + partialMin) * 10) / 10;
+  if (focusMinutes <= 0 && !blocks.length && !state.tasks?.length) return readFocusHistory();
+
+  const entry = {
+    id: state.phaseId || endedAt,
+    startedAt: state.sessionStartedAt || state.startedAt || endedAt,
+    endedAt,
+    reason,
+    focusMinutes,
+    completedBlocks: blocks.length,
+    focusMin: settings.focusMin,
+    tasks: (state.tasks || []).map((task) => ({
+      id: task.id,
+      title: task.title,
+      projectName: task.projectName || '',
+    })),
+  };
+  const previous = readFocusHistory().filter((item) => item.id !== entry.id);
+  return writeFocusHistory([entry, ...previous]);
+}
+
+export function formatSessionWhen(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return 'Hoje, ' + time;
+  if (date.toDateString() === yesterday.toDateString()) return 'Ontem, ' + time;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) + ', ' + time;
+}
+
+export function formatFocusMinutes(minutes) {
+  const n = Number(minutes) || 0;
+  if (n < 1) return Math.round(n * 60) + 's';
+  if (n < 60) return (Number.isInteger(n) ? n : n.toFixed(1)) + ' min';
+  const h = Math.floor(n / 60);
+  const m = Math.round(n % 60);
+  return m ? h + 'h ' + m + 'min' : h + 'h';
+}
+
+export function groupHistoryByDay(entries = []) {
+  const groups = [];
+  const index = {};
+  entries.forEach((entry) => {
+    const date = new Date(entry.endedAt || entry.startedAt);
+    const key = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-');
+    if (!index[key]) {
+      index[key] = { key, entries: [] };
+      groups.push(index[key]);
+    }
+    index[key].entries.push(entry);
+  });
+  return groups;
 }
 
 export function currentTask(state) {

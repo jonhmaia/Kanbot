@@ -20,6 +20,8 @@ Abra <http://localhost:5173> e entre com `jason@kanbot.io` / `Kanbot!demo` depoi
 
 Scripts avulsos: `npm run dev:server`, `npm run dev:web`, `npm run build`.
 
+Produção (Vercel + instaladores Windows/Mac + updates): veja [`DEPLOY.md`](DEPLOY.md).
+
 ---
 
 ## A ideia: colunas livres, status compartilhado

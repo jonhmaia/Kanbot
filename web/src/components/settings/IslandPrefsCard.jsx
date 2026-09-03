@@ -16,8 +16,8 @@ export default function IslandPrefsCard() {
     <Card className="grain p-5">
       <h3 className="card-title">Notch</h3>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-smoke">
-        Cor da borda e lado da tela. No app Windows, pressione a pílula e arraste para a lateral — ela
-        encaixa sozinha.
+        Cor da borda e lado da tela. No app nativo, pressione a pílula e arraste para a lateral — ela
+        encaixa sozinha. No Mac, o topo cola no notch da câmera.
       </p>
 
       <p className="mt-5 text-[11px] uppercase tracking-[0.14em] text-smoke">Acento</p>

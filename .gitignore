@@ -4,3 +4,5 @@ dist
 .env.local
 .DS_Store
 src-tauri/target
+src-tauri/.updater-key
+src-tauri/.updater-key.pub

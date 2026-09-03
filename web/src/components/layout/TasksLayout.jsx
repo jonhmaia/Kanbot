@@ -8,13 +8,17 @@ export default function TasksLayout() {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    const parsed = parseTaskLocation(pathname);
-    if (!parsed) return;
-    setTaskScope(parsed.scope);
-    setTaskTab(parsed.tab);
+    const next = parseTaskLocation(pathname);
+    if (!next) return;
+    setTaskScope(next.scope);
+    setTaskTab(next.tab);
   }, [pathname, setTaskScope, setTaskTab]);
 
-  return <Outlet />;
+  return (
+    <div className="pl-[6.75rem] sm:pl-[7.5rem]">
+      <Outlet />
+    </div>
+  );
 }
 
 export function RedirectToTasks({ tab }) {

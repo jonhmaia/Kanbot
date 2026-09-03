@@ -11,7 +11,8 @@
     "build": "npm --prefix web run build",
     "start": "npm --prefix server start",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "tauri build",
+    "icons": "node src-tauri/icons/generate.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.4",

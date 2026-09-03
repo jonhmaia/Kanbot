@@ -4,7 +4,11 @@ import {
   FOCUS_DAYS_KEY,
   FOCUS_KEY,
   FOCUS_SETTINGS_KEY,
+  FOCUS_SETUP_KEY,
+  FOCUS_HISTORY_KEY,
+  archiveFocusSession,
   bumpStreak,
+  clearFocusHistory,
   currentTask,
   emptyFocus,
   formatMmSs,
@@ -12,11 +16,14 @@ import {
   phaseMinutes,
   readFocus,
   readFocusDays,
+  readFocusHistory,
+  readFocusSetup,
   readPomodoro,
   remainingMs,
   snapshotTasks,
   streakCells,
   writeFocus,
+  writeFocusSetup,
 } from '../lib/focusSession';
 import { ISLAND_KEY, persistIslandPrefs, readIslandPrefs } from '../lib/islandPrefs';
 
@@ -30,6 +37,8 @@ export function FocusProvider({ children }) {
   const [prefs, setPrefs] = useState(readIslandPrefs);
   const [pomodoro, setPomodoro] = useState(readPomodoro);
   const [session, setSession] = useState(readFocus);
+  const [pendingTasks, setPendingTasks] = useState(readFocusSetup);
+  const [history, setHistory] = useState(readFocusHistory);
   const [days, setDays] = useState(readFocusDays);
   const [now, setNow] = useState(Date.now());
   const completing = useRef(false);
@@ -42,9 +51,11 @@ export function FocusProvider({ children }) {
   useEffect(() => {
     const onStorage = (e) => {
       if (e.key === FOCUS_KEY) setSession(readFocus());
+      if (e.key === FOCUS_SETUP_KEY) setPendingTasks(readFocusSetup());
       if (e.key === ISLAND_KEY) setPrefs(readIslandPrefs());
       if (e.key === FOCUS_SETTINGS_KEY) setPomodoro(readPomodoro());
       if (e.key === FOCUS_DAYS_KEY) setDays(readFocusDays());
+      if (e.key === FOCUS_HISTORY_KEY) setHistory(readFocusHistory());
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -56,24 +67,45 @@ export function FocusProvider({ children }) {
     return next;
   }, []);
 
+  const requestFocus = useCallback((tasks) => {
+    const list = snapshotTasks(tasks).filter((task) => task.id);
+    if (!list.length) return;
+    writeFocusSetup(list);
+    setPendingTasks(list);
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('island')) {
+      import('../lib/desktop').then(({ invokeDesktop }) => invokeDesktop('show_main'));
+    }
+  }, []);
+
+  const dismissSetup = useCallback(() => {
+    writeFocusSetup([]);
+    setPendingTasks([]);
+  }, []);
+
   const startFocus = useCallback(
-    (tasks) => {
+    (tasks, settingsPatch) => {
       const list = snapshotTasks(tasks).filter((task) => task.id);
       if (!list.length) return;
-      const settings = readPomodoro();
+      const settings = settingsPatch ? persistPomodoro(settingsPatch) : readPomodoro();
+      if (settingsPatch) setPomodoro(settings);
       const ms = settings.focusMin * 60 * 1000;
+      const startedAt = Date.now();
       completing.current = false;
+      writeFocusSetup([]);
+      setPendingTasks([]);
       commit({
         status: 'running',
         phase: 'focus',
-        phaseId: Date.now(),
-        startedAt: Date.now(),
-        endsAt: Date.now() + ms,
+        phaseId: startedAt,
+        startedAt,
+        sessionStartedAt: startedAt,
+        endsAt: startedAt + ms,
         remainingMs: ms,
         taskIds: list.map((task) => task.id),
         tasks: list,
         currentTaskId: list[0].id,
         cycle: 0,
+        completedBlocks: [],
         settings,
       });
     },
@@ -105,8 +137,14 @@ export function FocusProvider({ children }) {
 
   const stop = useCallback(() => {
     completing.current = false;
+    const current = readFocus();
+    setHistory(archiveFocusSession(current, { reason: 'stopped' }));
     commit(emptyFocus());
   }, [commit]);
+
+  const clearHistory = useCallback(() => {
+    setHistory(clearFocusHistory());
+  }, []);
 
   const switchTask = useCallback(
     (taskId) => {
@@ -125,9 +163,11 @@ export function FocusProvider({ children }) {
     commit({ ...current, status: 'transition', remainingMs: 0, endsAt: null });
 
     let tasks = current.tasks;
+    let completedBlocks = Array.isArray(current.completedBlocks) ? current.completedBlocks : [];
     if (current.phase === 'focus' && current.currentTaskId) {
       const task = current.tasks.find((item) => item.id === current.currentTaskId);
-      const hours = (current.settings?.focusMin || 25) / 60;
+      const minutes = current.settings?.focusMin || 25;
+      const hours = minutes / 60;
       try {
         const updated = await api.updateTask(current.currentTaskId, {
           loggedHours: (Number(task?.loggedHours) || 0) + hours,
@@ -138,6 +178,15 @@ export function FocusProvider({ children }) {
       } catch {
         /* offline / RLS */
       }
+      completedBlocks = [
+        ...completedBlocks,
+        {
+          taskId: current.currentTaskId,
+          title: task?.title || 'Foco',
+          minutes,
+          at: Date.now(),
+        },
+      ];
       setDays(bumpStreak(todayKey()));
     }
 
@@ -150,6 +199,7 @@ export function FocusProvider({ children }) {
     commit({
       ...current,
       tasks,
+      completedBlocks,
       status: 'running',
       phase: nextPhase,
       phaseId: Date.now(),
@@ -195,10 +245,15 @@ export function FocusProvider({ children }) {
       idle: session.status === 'idle',
       streak: streakCells(35),
       days,
+      pendingTasks,
+      history,
+      requestFocus,
+      dismissSetup,
       startFocus,
       pause,
       resume,
       stop,
+      clearHistory,
       switchTask,
     }),
     [
@@ -209,10 +264,15 @@ export function FocusProvider({ children }) {
       session,
       left,
       days,
+      pendingTasks,
+      history,
+      requestFocus,
+      dismissSetup,
       startFocus,
       pause,
       resume,
       stop,
+      clearHistory,
       switchTask,
     ],
   );
