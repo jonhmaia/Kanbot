@@ -3,6 +3,15 @@
   "installCommand": "npm --prefix web install",
   "buildCommand": "npm --prefix web run build",
   "outputDirectory": "web/dist",
+  "headers": [
+    {
+      "source": "/api/download-windows",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-transform" },
+        { "key": "Content-Encoding", "value": "identity" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

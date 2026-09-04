@@ -39,7 +39,9 @@ function sendFile(res, buf, filename) {
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
   res.setHeader('Content-Length', String(buf.length));
-  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Cache-Control', 'no-store, no-transform');
+  res.setHeader('Content-Encoding', 'identity');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.status(200).send(buf);
 }
 

@@ -9,34 +9,8 @@ function saveBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function looksLikeInstaller(blob, type) {
-  if (!blob || blob.size < 80_000) return false;
-  if (type.includes('text/html') || type.includes('json') || type.includes('text/plain')) return false;
-  return true;
-}
-
-async function saveFromUrl(url, filename) {
-  try {
-    const file = await fetch(url, { redirect: 'follow' });
-    const type = file.headers.get('content-type') || '';
-    if (file.ok) {
-      const blob = await file.blob();
-      if (looksLikeInstaller(blob, type)) {
-        saveBlob(blob, filename);
-        return;
-      }
-    }
-  } catch {
-    /* CORS do GitHub/Pages: cai no download direto do arquivo */
-  }
-
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+function isWindowsExe(bytes) {
+  return bytes.length >= 80_000 && bytes[0] === 0x4d && bytes[1] === 0x5a;
 }
 
 export async function downloadWindowsInstaller() {
@@ -45,20 +19,17 @@ export async function downloadWindowsInstaller() {
 
   if (type.includes('json')) {
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.url) {
-      throw new Error(data.error || 'Instalador indisponivel no momento.');
-    }
-    await saveFromUrl(data.url, data.filename || 'Kanbot-setup.exe');
-    return;
+    throw new Error(data.error || 'Instalador indisponivel no momento.');
   }
 
   if (!res.ok) {
     throw new Error('Instalador indisponivel no momento.');
   }
 
-  const blob = await res.blob();
-  if (!looksLikeInstaller(blob, type)) {
-    throw new Error('Instalador indisponivel no momento.');
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (!isWindowsExe(bytes)) {
+    throw new Error('O instalador veio incompleto. Atualiza a pagina e tenta de novo.');
   }
-  saveBlob(blob, 'Kanbot-setup.exe');
+
+  saveBlob(new Blob([bytes], { type: 'application/octet-stream' }), 'Kanbot-setup.exe');
 }
