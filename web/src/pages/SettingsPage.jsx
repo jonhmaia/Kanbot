@@ -10,6 +10,7 @@ import IslandPrefsCard from '../components/settings/IslandPrefsCard';
 import PomodoroCard from '../components/settings/PomodoroCard';
 import FocusHistoryCard from '../components/settings/FocusHistoryCard';
 import McpCard from '../components/settings/McpCard';
+import WindowsDownloadCard from '../components/settings/WindowsDownloadCard';
 
 export default function SettingsPage() {
   const { workspaces, workspaceId, members, statuses, projects, signOut } = useApp();
@@ -121,6 +122,8 @@ export default function SettingsPage() {
               Sair
             </button>
           </Card>
+
+          <WindowsDownloadCard />
 
           <Card className="grain p-5">
             <h3 className="card-title">Membros</h3>

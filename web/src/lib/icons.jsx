@@ -251,6 +251,33 @@ export const IconShield = (p) => (
   </Svg>
 );
 
+export const IconMail = (p) => (
+  <Svg {...p}>
+    <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" />
+    <path d="m4.5 8 7.5 5.2L19.5 8" />
+  </Svg>
+);
+
+export const IconLock = (p) => (
+  <Svg {...p}>
+    <rect x="5" y="11" width="14" height="10" rx="2.5" />
+    <path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3" />
+  </Svg>
+);
+
+export const IconUser = (p) => (
+  <Svg {...p}>
+    <circle cx="12" cy="8" r="3.2" />
+    <path d="M5 19.5a7 7 0 0 1 14 0" />
+  </Svg>
+);
+
+export const IconWindows = (p) => (
+  <svg width={p.size || 16} height={p.size || 16} viewBox="0 0 24 24" className={p.className} aria-hidden="true" fill="currentColor">
+    <path d="M3 5.2 10.4 4.2v7.1H3V5.2Zm8.2-1.2L21 2.6v8.7h-9.8V4ZM3 12.7h7.4v7.1L3 18.8v-6.1Zm8.2 0H21v8.7l-9.8-1.4v-7.3Z" />
+  </svg>
+);
+
 export const IconDevice = (p) => (
   <Svg {...p}>
     <rect x="7" y="3" width="10" height="18" rx="3" />

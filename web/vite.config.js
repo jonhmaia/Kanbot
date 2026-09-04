@@ -9,14 +9,14 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     watch: {
-      ignored: ['**/src-tauri/**'],
+      ignored: ['**/src-tauri/**', '**/.tmp-edge-profile/**'],
     },
     proxy: {
       '/api': {
         target: 'http://localhost:4000',
         changeOrigin: true,
         bypass(req) {
-          if (req.url?.startsWith('/api/ask')) return req.url;
+          if (req.url?.startsWith('/api/ask') || req.url?.startsWith('/api/download-windows')) return req.url;
         },
       },
     },

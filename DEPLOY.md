@@ -2,7 +2,9 @@
 
 Web na Vercel, instaladores Windows/Mac pelo GitHub Releases, updates assinado no app.
 
-O repositório `jonhmaia/Kanbot` está **privado**. O updater baixa `latest.json` e os instaladores sem autenticação. Para outras pessoas receberem update, deixe o repo público ou publique as Releases num repo público e troque o endpoint em `src-tauri/tauri.conf.json`.
+Push na `main` gera o instalador Windows e publica a Release + `Kanbot-setup.exe` no GitHub Pages. O botao **Baixar para Windows** chama `/api/download-windows` e inicia o arquivo na propria pagina — nao abre o GitHub.
+
+O repositorio precisa ser **publico** para o `.exe`, o `latest.json` do updater e o Pages funcionarem sem login.
 
 ## 1. Contas
 

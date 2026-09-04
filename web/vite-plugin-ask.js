@@ -1,5 +1,6 @@
 import { loadEnv } from 'vite';
 import { callOpenRouter } from './src/lib/ai/openrouter.js';
+import { sendWindowsInstaller } from './src/lib/serveWindowsInstaller.js';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -40,26 +41,32 @@ async function handleAsk(req, res, apiKey) {
   }
 }
 
+function attachRoutes(server, env) {
+  const apiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
+  const token = env.GITHUB_TOKEN || env.GH_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  server.middlewares.use((req, res, next) => {
+    const path = req.url?.split('?')[0];
+    if (path === '/api/download-windows') {
+      sendWindowsInstaller(res, { token }).catch(() => {
+        res.statusCode = 502;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({ error: 'Nao consegui buscar o instalador.' }));
+      });
+      return;
+    }
+    if (path !== '/api/ask') return next();
+    handleAsk(req, res, apiKey);
+  });
+}
+
 export function kanbotAskPlugin() {
   return {
     name: 'kanbot-ask',
     configureServer(server) {
-      const env = loadEnv(server.config.mode, server.config.envDir || process.cwd(), '');
-      const apiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
-      server.middlewares.use((req, res, next) => {
-        const path = req.url?.split('?')[0];
-        if (path !== '/api/ask') return next();
-        handleAsk(req, res, apiKey);
-      });
+      attachRoutes(server, loadEnv(server.config.mode, server.config.envDir || process.cwd(), ''));
     },
     configurePreviewServer(server) {
-      const env = loadEnv(server.config.mode, server.config.envDir || process.cwd(), '');
-      const apiKey = env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY;
-      server.middlewares.use((req, res, next) => {
-        const path = req.url?.split('?')[0];
-        if (path !== '/api/ask') return next();
-        handleAsk(req, res, apiKey);
-      });
+      attachRoutes(server, loadEnv(server.config.mode, server.config.envDir || process.cwd(), ''));
     },
   };
 }
