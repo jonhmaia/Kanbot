@@ -1,12 +1,17 @@
 import { OPENROUTER_MODEL, OPENROUTER_URL, REPLY_JSON_SCHEMA, buildSystemPrompt } from './schema.js';
+import { describeContext } from './context.js';
 
-export async function callOpenRouter({ apiKey, prompt, history = [], catalog }) {
+export async function callOpenRouter({ apiKey, prompt, history = [], catalog, context = null }) {
   if (!apiKey) throw new Error('OPENROUTER_API_KEY ausente');
 
   const messages = [
     {
       role: 'system',
-      content: buildSystemPrompt() + '\n\nCATALOGO DO WORKSPACE:\n' + JSON.stringify(catalog),
+      content:
+        buildSystemPrompt() +
+        '\n\nCATALOGO DO WORKSPACE:\n' +
+        JSON.stringify(catalog) +
+        (context ? '\n\n' + describeContext(context) : ''),
     },
     ...history.slice(-8).map((m) => ({
       role: m.role === 'bot' || m.role === 'assistant' ? 'assistant' : 'user',

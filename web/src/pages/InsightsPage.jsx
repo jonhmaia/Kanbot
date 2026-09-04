@@ -1,12 +1,25 @@
 import PageHeader from '../components/layout/PageHeader';
 import { Card, EmptyState } from '../components/ui/Primitives';
-import { InsightsPanel, AssistantPanel } from '../components/dashboard/AiRail';
-import { useChat } from '../context/ChatContext';
+import { InsightsPanel } from '../components/dashboard/AiRail';
+import { IconSpark } from '../lib/icons';
+import { useApp } from '../context/AppContext';
+import { useChat, useAssistantContext } from '../context/ChatContext';
 import useDashboardScope from '../lib/useDashboardScope';
 
 export default function InsightsPage() {
-  const { open, focusChat } = useChat();
-  const { isMaster, data, reload } = useDashboardScope();
+  const { projects } = useApp();
+  const { focusChat } = useChat();
+  const { scope, isMaster, data, reload } = useDashboardScope();
+  const project = projects.find((p) => p.id === scope);
+
+  useAssistantContext('insights', {
+    view: {
+      insights: data?.insights?.length ?? 0,
+      pendingInsights: data?.insights?.filter((i) => !i.applied).length ?? 0,
+      overdue: data?.stats?.overdue ?? null,
+      project: project?.name || 'Master',
+    },
+  });
 
   return (
     <>
@@ -14,27 +27,18 @@ export default function InsightsPage() {
         title="AI Insights"
         eyebrow={
           isMaster
-            ? 'DeepSeek V4 Flash via OpenRouter — cards, pessoas e graficos no chat'
-            : 'Sugestoes e chat neste projeto'
+            ? 'Sugestoes automaticas de todos os projetos'
+            : 'Sugestoes automaticas deste projeto'
+        }
+        action={
+          <button type="button" onClick={() => focusChat()} className="btn-primary">
+            <IconSpark size={14} /> Falar com o assistente
+          </button>
         }
       />
 
-      <div className="grid gap-4 px-5 pb-10 sm:px-7 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="grain flex min-h-[640px] flex-col p-5">
-          {open ? (
-            <button
-              type="button"
-              onClick={focusChat}
-              className="m-auto rounded-2xl border border-lineSoft bg-white/[0.03] px-6 py-8 text-center text-[13px] text-smoke transition hover:text-chalk"
-            >
-              Chat aberto na janela. Clique para focar.
-            </button>
-          ) : (
-            <AssistantPanel compact={false} />
-          )}
-        </Card>
-
-        <Card className="grain h-fit p-5">
+      <div className="px-5 pb-10 sm:px-7">
+        <Card className="grain p-5">
           {data ? (
             data.insights.length ? (
               <InsightsPanel insights={data.insights} onApplied={reload} />

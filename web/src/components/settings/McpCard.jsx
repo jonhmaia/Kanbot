@@ -103,11 +103,11 @@ export default function McpCard() {
 
   return (
     <>
-      <Card className="grain p-5">
-        <h3 className="card-title">Conectar IAs (MCP)</h3>
+      <Card className="grain p-5 sm:p-6">
+        <h3 className="card-title">Model Context Protocol</h3>
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-smoke">
-          Endpoint remoto para Cursor, Claude, n8n e outros clientes MCP. O token autentica no
-          workspace atual e herda sua permissao (leitura e escrita, exceto viewer).
+          Endpoint para Cursor, Claude e n8n. O token autentica neste workspace e herda a sua
+          permissao — leitura e escrita, exceto para viewer.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">

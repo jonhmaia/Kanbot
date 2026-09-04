@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useFocus } from '../../context/FocusContext';
 import { invokeDesktop, listenDesktop } from '../../lib/desktop';
-import { islandAccentColor } from '../../lib/islandPrefs';
 import { IconClock, IconClose, IconFlame, IconList, IconLogo, IconPause, IconPlay } from '../../lib/icons';
 
 export default function IslandApp() {
@@ -10,6 +9,7 @@ export default function IslandApp() {
   const {
     prefs,
     setIslandPrefs,
+    accent,
     session: focus,
     clock,
     activeTask,
@@ -21,24 +21,31 @@ export default function IslandApp() {
     pause,
     resume,
     stop,
+    skipPhase,
     switchTask,
   } = useFocus();
   const [expanded, setExpanded] = useState(false);
   const dragging = useRef(false);
+  const collapsedByUser = useRef(false);
   const press = useRef(null);
   const leaveTimer = useRef(null);
   const loggedIn = Boolean(session);
-  const accent = islandAccentColor(prefs.accent);
   const side = prefs.edge !== 'top';
   const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
 
   useEffect(() => {
-    invokeDesktop('resize_island', { expanded: false, edge: prefs.edge });
-  }, []);
+    if (prefs.visible === false) {
+      setExpanded(false);
+      invokeDesktop('hide_island');
+      return;
+    }
+    invokeDesktop('show_island');
+  }, [prefs.visible]);
 
   useEffect(() => {
+    if (prefs.visible === false) return;
     invokeDesktop('resize_island', { expanded, edge: prefs.edge });
-  }, [expanded, prefs.edge]);
+  }, [expanded, prefs.edge, prefs.visible]);
 
   useEffect(() => {
     let stop = () => {};
@@ -56,15 +63,26 @@ export default function IslandApp() {
   };
 
   const onEnter = () => {
-    if (dragging.current) return;
+    if (dragging.current || collapsedByUser.current) return;
     clearTimeout(leaveTimer.current);
     if (loggedIn) applyExpanded(true);
   };
 
   const onLeave = () => {
+    collapsedByUser.current = false;
     if (dragging.current) return;
     clearTimeout(leaveTimer.current);
     leaveTimer.current = setTimeout(() => applyExpanded(false), 280);
+  };
+
+  const collapse = () => {
+    collapsedByUser.current = true;
+    applyExpanded(false);
+  };
+
+  const hideIsland = () => {
+    setIslandPrefs({ visible: false });
+    invokeDesktop('hide_island');
   };
 
   const onPointerDown = (e) => {
@@ -98,7 +116,16 @@ export default function IslandApp() {
   const pill = (
     <button
       type="button"
-      onClick={() => (idle ? invokeDesktop('show_main') : running ? pause() : resume())}
+      onClick={() => {
+        if (collapsedByUser.current && loggedIn) {
+          collapsedByUser.current = false;
+          applyExpanded(true);
+          return;
+        }
+        if (idle) invokeDesktop('show_main');
+        else if (running) pause();
+        else resume();
+      }}
       onPointerDown={onPointerDown}
       onPointerUp={endPress}
       onPointerCancel={endPress}
@@ -206,8 +233,23 @@ export default function IslandApp() {
             ))}
           </div>
           <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-            <p className="text-[11px] text-smoke">{idle ? 'Pronto' : focus.phase === 'break' ? 'Pausa' : 'Foco'}</p>
+            <p className="text-[11px] text-smoke">
+              {idle
+                ? 'Pronto'
+                : focus.phase === 'break'
+                  ? paused
+                    ? 'Pausa pronta'
+                    : 'Pausa'
+                  : paused
+                    ? 'Pausado'
+                    : 'Foco'}
+            </p>
             <div className="flex items-center gap-1">
+              {!idle && (
+                <button type="button" onClick={skipPhase} className="px-2 text-[11px] text-smoke hover:text-chalk">
+                  Pular
+                </button>
+              )}
               {!idle && (
                 <button type="button" onClick={stop} className="px-2 text-[11px] text-smoke hover:text-chalk">
                   Encerrar
@@ -215,14 +257,14 @@ export default function IslandApp() {
               )}
               <button
                 type="button"
-                onClick={() => invokeDesktop('quit_app')}
+                onClick={hideIsland}
                 className="px-2 text-[11px] text-rose/80 hover:text-rose"
               >
                 Sair
               </button>
               <button
                 type="button"
-                onClick={() => applyExpanded(false)}
+                onClick={collapse}
                 className="grid h-7 w-7 place-items-center rounded-full text-dust hover:bg-white/[0.06] hover:text-chalk"
                 aria-label="Recolher"
               >

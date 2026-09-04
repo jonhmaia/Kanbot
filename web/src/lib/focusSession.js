@@ -1,3 +1,5 @@
+import { readLocalJson, writeLocal, writeLocalJson } from './userPrefs';
+
 export const FOCUS_KEY = 'kanbot:focus';
 export const FOCUS_DAYS_KEY = 'kanbot:focus-days';
 export const FOCUS_SETTINGS_KEY = 'kanbot:pomodoro';
@@ -10,7 +12,111 @@ export const DEFAULT_POMODORO = {
   shortBreakMin: 5,
   longBreakMin: 15,
   cyclesUntilLong: 4,
+  autoStartBreaks: true,
+  autoStartFocus: true,
+  sound: true,
+  desktopNotify: false,
+  breakPresence: 'focusing',
+  dailyGoalMin: 0,
 };
+
+export const POMODORO_PRESETS = [
+  { id: 'classic', name: 'Classico', hint: '25 · 5 · 15', focusMin: 25, shortBreakMin: 5, longBreakMin: 15, cyclesUntilLong: 4 },
+  { id: 'deep', name: 'Profundo', hint: '50 · 10 · 20', focusMin: 50, shortBreakMin: 10, longBreakMin: 20, cyclesUntilLong: 3 },
+  { id: 'sprint', name: 'Sprint', hint: '15 · 3 · 10', focusMin: 15, shortBreakMin: 3, longBreakMin: 10, cyclesUntilLong: 4 },
+  { id: 'flow', name: 'Flow', hint: '90 · 15 · 30', focusMin: 90, shortBreakMin: 15, longBreakMin: 30, cyclesUntilLong: 2 },
+];
+
+export function normalizePomodoro(raw = {}) {
+  return {
+    focusMin: clampInt(raw.focusMin, 1, 180, DEFAULT_POMODORO.focusMin),
+    shortBreakMin: clampInt(raw.shortBreakMin, 1, 60, DEFAULT_POMODORO.shortBreakMin),
+    longBreakMin: clampInt(raw.longBreakMin, 1, 90, DEFAULT_POMODORO.longBreakMin),
+    cyclesUntilLong: clampInt(raw.cyclesUntilLong, 1, 12, DEFAULT_POMODORO.cyclesUntilLong),
+    autoStartBreaks: raw.autoStartBreaks !== false,
+    autoStartFocus: raw.autoStartFocus !== false,
+    sound: raw.sound !== false,
+    desktopNotify: raw.desktopNotify === true,
+    breakPresence: raw.breakPresence === 'available' ? 'available' : 'focusing',
+    dailyGoalMin: clampInt(raw.dailyGoalMin, 0, 720, 0),
+  };
+}
+
+export function matchingPreset(settings) {
+  return (
+    POMODORO_PRESETS.find(
+      (item) =>
+        item.focusMin === settings.focusMin &&
+        item.shortBreakMin === settings.shortBreakMin &&
+        item.longBreakMin === settings.longBreakMin &&
+        item.cyclesUntilLong === settings.cyclesUntilLong,
+    ) || null
+  );
+}
+
+export function sessionStamp(state) {
+  if (!state) return '';
+  return [
+    state.status,
+    state.phase,
+    state.phaseId,
+    state.endsAt,
+    state.remainingMs,
+    state.currentTaskId,
+    state.cycle,
+    (state.completedBlocks || []).length,
+    (state.tasks || []).length,
+  ].join('|');
+}
+
+export function todayFocusMinutes(entries = []) {
+  const key = new Date().toISOString().slice(0, 10);
+  return entries.reduce((sum, entry) => {
+    const at = new Date(entry.endedAt || entry.startedAt);
+    if (Number.isNaN(at.getTime()) || at.toISOString().slice(0, 10) !== key) return sum;
+    return sum + (Number(entry.focusMinutes) || 0);
+  }, 0);
+}
+
+export function playFocusCue(kind) {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = kind === 'break' ? 523 : 392;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.07, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.32);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.36);
+    osc.onended = () => ctx.close().catch(() => {});
+  } catch {
+    /* autoplay / unsupported */
+  }
+}
+
+export function notifyFocusPhase(phase, minutes) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    new Notification(phase === 'break' ? 'Kanbot · Pausa' : 'Kanbot · Foco', {
+      body: minutes + ' min',
+      silent: true,
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+export function askNotifyPermission() {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'default') return;
+  Notification.requestPermission().catch(() => {});
+}
 
 export function emptyFocus() {
   return {
@@ -37,70 +143,40 @@ export function clampInt(value, min, max, fallback) {
 }
 
 export function readPomodoro() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(FOCUS_SETTINGS_KEY) || '{}');
-    return {
-      focusMin: clampInt(raw.focusMin, 1, 90, DEFAULT_POMODORO.focusMin),
-      shortBreakMin: clampInt(raw.shortBreakMin, 1, 30, DEFAULT_POMODORO.shortBreakMin),
-      longBreakMin: clampInt(raw.longBreakMin, 1, 45, DEFAULT_POMODORO.longBreakMin),
-      cyclesUntilLong: clampInt(raw.cyclesUntilLong, 1, 8, DEFAULT_POMODORO.cyclesUntilLong),
-    };
-  } catch {
-    return { ...DEFAULT_POMODORO };
-  }
+  return normalizePomodoro(readLocalJson(FOCUS_SETTINGS_KEY, {}) || {});
 }
 
 export function readFocusSetup() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(FOCUS_SETUP_KEY) || 'null');
-    return Array.isArray(raw) ? raw.filter((task) => task?.id) : [];
-  } catch {
-    return [];
-  }
+  const raw = readLocalJson(FOCUS_SETUP_KEY, null);
+  return Array.isArray(raw) ? raw.filter((task) => task?.id) : [];
 }
 
 export function writeFocusSetup(tasks) {
-  try {
-    if (!tasks?.length) localStorage.removeItem(FOCUS_SETUP_KEY);
-    else localStorage.setItem(FOCUS_SETUP_KEY, JSON.stringify(tasks));
-  } catch {
-    /* quota / private mode */
-  }
+  if (!tasks?.length) writeLocal(FOCUS_SETUP_KEY, null);
+  else writeLocalJson(FOCUS_SETUP_KEY, tasks);
   return tasks || [];
 }
 
 export function persistPomodoro(patch) {
-  const next = { ...readPomodoro(), ...patch };
-  const clean = {
-    focusMin: clampInt(next.focusMin, 1, 90, DEFAULT_POMODORO.focusMin),
-    shortBreakMin: clampInt(next.shortBreakMin, 1, 30, DEFAULT_POMODORO.shortBreakMin),
-    longBreakMin: clampInt(next.longBreakMin, 1, 45, DEFAULT_POMODORO.longBreakMin),
-    cyclesUntilLong: clampInt(next.cyclesUntilLong, 1, 8, DEFAULT_POMODORO.cyclesUntilLong),
-  };
-  try {
-    localStorage.setItem(FOCUS_SETTINGS_KEY, JSON.stringify(clean));
-  } catch {
-    /* quota / private mode */
-  }
+  const clean = normalizePomodoro({ ...readPomodoro(), ...patch });
+  writeLocalJson(FOCUS_SETTINGS_KEY, clean);
   return clean;
 }
 
 export function readFocus() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(FOCUS_KEY) || 'null');
-    if (!raw || typeof raw !== 'object') return emptyFocus();
-    return { ...emptyFocus(), ...raw, tasks: Array.isArray(raw.tasks) ? raw.tasks : [] };
-  } catch {
-    return emptyFocus();
-  }
+  const raw = readLocalJson(FOCUS_KEY, null);
+  if (!raw || typeof raw !== 'object') return emptyFocus();
+  const base = emptyFocus();
+  return {
+    ...base,
+    ...raw,
+    tasks: Array.isArray(raw.tasks) ? raw.tasks : [],
+    settings: normalizePomodoro({ ...base.settings, ...raw.settings }),
+  };
 }
 
 export function writeFocus(state) {
-  try {
-    localStorage.setItem(FOCUS_KEY, JSON.stringify(state));
-  } catch {
-    /* quota / private mode */
-  }
+  writeLocalJson(FOCUS_KEY, state);
   return state;
 }
 
@@ -124,27 +200,20 @@ export function snapshotTasks(tasks = []) {
     title: task.title,
     description: task.description || '',
     projectName: task.projectName || '',
+    projectColor: task.projectColor || '',
     loggedHours: Number(task.loggedHours) || 0,
   }));
 }
 
 export function readFocusDays() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(FOCUS_DAYS_KEY) || '{}');
-    return raw && typeof raw === 'object' ? raw : {};
-  } catch {
-    return {};
-  }
+  const raw = readLocalJson(FOCUS_DAYS_KEY, {});
+  return raw && typeof raw === 'object' ? raw : {};
 }
 
 export function bumpStreak(isoDay) {
   const days = readFocusDays();
   days[isoDay] = (days[isoDay] || 0) + 1;
-  try {
-    localStorage.setItem(FOCUS_DAYS_KEY, JSON.stringify(days));
-  } catch {
-    /* quota / private mode */
-  }
+  writeLocalJson(FOCUS_DAYS_KEY, days);
   return days;
 }
 
@@ -163,21 +232,13 @@ export function streakCells(count = 35) {
 }
 
 export function readFocusHistory() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(FOCUS_HISTORY_KEY) || '[]');
-    return Array.isArray(raw) ? raw : [];
-  } catch {
-    return [];
-  }
+  const raw = readLocalJson(FOCUS_HISTORY_KEY, []);
+  return Array.isArray(raw) ? raw : [];
 }
 
 export function writeFocusHistory(entries) {
   const list = (entries || []).slice(0, HISTORY_LIMIT);
-  try {
-    localStorage.setItem(FOCUS_HISTORY_KEY, JSON.stringify(list));
-  } catch {
-    /* quota / private mode */
-  }
+  writeLocalJson(FOCUS_HISTORY_KEY, list);
   return list;
 }
 

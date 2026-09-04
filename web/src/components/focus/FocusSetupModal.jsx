@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useFocus } from '../../context/FocusContext';
-import { Field, Sheet } from '../ui/Primitives';
+import { POMODORO_PRESETS, matchingPreset } from '../../lib/focusSession';
+import { Field, Sheet, Switch } from '../ui/Primitives';
 import { IconPlay } from '../../lib/icons';
 
 const FIELDS = [
@@ -14,6 +15,7 @@ export default function FocusSetupModal() {
   const { pendingTasks, pomodoro, startFocus, dismissSetup } = useFocus();
   const open = pendingTasks.length > 0;
   const [form, setForm] = useState(pomodoro);
+  const preset = matchingPreset(form);
 
   useEffect(() => {
     if (open) setForm(pomodoro);
@@ -52,6 +54,27 @@ export default function FocusSetupModal() {
       }
     >
       <div className="space-y-5">
+        <div className="flex flex-wrap gap-1.5">
+          {POMODORO_PRESETS.map((item) => {
+            const selected = preset?.id === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setForm((current) => ({ ...current, ...item }))}
+                className={
+                  'rounded-full border px-2.5 py-1 text-[11.5px] transition ' +
+                  (selected
+                    ? 'border-white/30 bg-white/[0.07] text-chalk'
+                    : 'border-line text-dust hover:border-white/20')
+                }
+              >
+                {item.name}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           {FIELDS.map((field) => (
             <Field key={field.key} label={field.label}>
@@ -69,6 +92,25 @@ export default function FocusSetupModal() {
               </span>
             </Field>
           ))}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-lineSoft bg-white/[0.03] px-3.5 py-2.5">
+            <p className="text-[13px] text-chalk/90">Comecar pausas sozinho</p>
+            <Switch
+              checked={form.autoStartBreaks !== false}
+              onChange={(autoStartBreaks) => setForm((current) => ({ ...current, autoStartBreaks }))}
+              label="Comecar pausas sozinho"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-lineSoft bg-white/[0.03] px-3.5 py-2.5">
+            <p className="text-[13px] text-chalk/90">Comecar o proximo foco sozinho</p>
+            <Switch
+              checked={form.autoStartFocus !== false}
+              onChange={(autoStartFocus) => setForm((current) => ({ ...current, autoStartFocus }))}
+              label="Comecar o proximo foco sozinho"
+            />
+          </div>
         </div>
 
         <div>

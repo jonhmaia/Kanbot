@@ -18,6 +18,7 @@ import {
 } from '../lib/optimistic';
 import useAllColumns from '../lib/useAllColumns';
 import { useApp } from '../context/AppContext';
+import { useAssistantContext } from '../context/ChatContext';
 
 /**
  * Board master: uma unica tela com as tarefas de todos os projetos,
@@ -50,6 +51,26 @@ export default function MasterBoardPage() {
       ),
     }));
   }, [board, search, projectFilter, assignee]);
+
+  /* o assistente enxerga o board master e a tarefa aberta */
+  useAssistantContext(
+    'board',
+    useMemo(() => {
+      if (!board) return null;
+      return {
+        isMaster: true,
+        view: {
+          columns: board.columns.map((c) => c.name + ' (' + c.tasks.length + ')'),
+          tasks: board.columns.reduce((n, c) => n + c.tasks.length, 0),
+          search: search || undefined,
+          projectFilter: projects.filter((p) => projectFilter.includes(p.id)).map((p) => p.key),
+          assigneeFilter: members.find((m) => m.id === assignee)?.name,
+        },
+        openTask: taskSheet?.task || null,
+        openTaskDraft: Boolean(taskSheet && !taskSheet.task),
+      };
+    }, [board, projects, members, search, projectFilter, assignee, taskSheet]),
+  );
 
   const move = async (task, target) => {
     setBoard((b) => moveOnBoard(b, task, target));

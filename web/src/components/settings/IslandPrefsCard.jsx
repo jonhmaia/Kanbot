@@ -1,7 +1,7 @@
 import { useFocus } from '../../context/FocusContext';
 import { invokeDesktop } from '../../lib/desktop';
 import { ISLAND_ACCENTS, ISLAND_EDGES } from '../../lib/islandPrefs';
-import { Card } from '../ui/Primitives';
+import { Card, Switch } from '../ui/Primitives';
 import { IconCheck } from '../../lib/icons';
 
 export default function IslandPrefsCard() {
@@ -12,13 +12,26 @@ export default function IslandPrefsCard() {
     invokeDesktop('resize_island', { expanded: false, edge });
   };
 
+  const setVisible = (visible) => {
+    setIslandPrefs({ visible });
+    invokeDesktop(visible ? 'show_island' : 'hide_island');
+  };
+
   return (
-    <Card className="grain p-5">
+    <Card className="grain p-5 sm:p-6">
       <h3 className="card-title">Notch</h3>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-smoke">
-        Cor da borda e lado da tela. No app nativo, pressione a pílula e arraste para a lateral — ela
-        encaixa sozinha. No Mac, o topo cola no notch da câmera.
+        A pilula flutuante no app nativo. Sair esconde sem fechar o Kanbot; o X so recolhe o painel.
+        Arraste para a lateral para encaixar. Com um projeto aberto, a borda segue a cor dele.
       </p>
+
+      <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-lineSoft bg-white/[0.03] px-3.5 py-2.5">
+        <div>
+          <p className="text-[13px] text-chalk/90">Mostrar notch</p>
+          <p className="mt-0.5 text-[11.5px] text-smoke">Tira e coloca a pílula flutuante</p>
+        </div>
+        <Switch checked={prefs.visible} onChange={setVisible} label="Mostrar notch" />
+      </div>
 
       <p className="mt-5 text-[11px] uppercase tracking-[0.14em] text-smoke">Acento</p>
       <div className="mt-2.5 flex flex-wrap gap-2">

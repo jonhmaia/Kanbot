@@ -3,8 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
 import BoardCanvas from '../components/board/BoardCanvas';
 import { ColumnSheet, TaskSheet } from '../components/board/BoardSheets';
+import InviteSheet from '../components/project/InviteSheet';
 import { AvatarStack, Dropdown, EmptyState } from '../components/ui/Primitives';
-import { IconChevronRight, IconPlus, projectIcons } from '../lib/icons';
+import { IconChevronRight, IconPlus, IconUsers, projectIcons } from '../lib/icons';
 import { api } from '../lib/api';
 import CachedGate from '../components/ui/CachedGate';
 import { useCached } from '../lib/useCached';
@@ -21,6 +22,7 @@ import {
   tempId,
 } from '../lib/optimistic';
 import { useApp } from '../context/AppContext';
+import { useAssistantContext } from '../context/ChatContext';
 
 const PRIORITY_FILTERS = [
   { value: '', label: 'Todas prioridades' },
@@ -38,8 +40,9 @@ export default function ProjectBoardPage() {
   const [search, setSearch] = useState('');
   const [priority, setPriority] = useState('');
   const [assignee, setAssignee] = useState('');
-  const [taskSheet, setTaskSheet] = useState(null); // { task?, columnId? }
-  const [columnSheet, setColumnSheet] = useState(null); // { column? }
+  const [taskSheet, setTaskSheet] = useState(null);
+  const [columnSheet, setColumnSheet] = useState(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const filtered = useMemo(() => {
     if (!board) return [];
@@ -54,6 +57,29 @@ export default function ProjectBoardPage() {
       ),
     }));
   }, [board, search, priority, assignee]);
+
+  /* o assistente enxerga este board e a tarefa aberta */
+  useAssistantContext(
+    'board',
+    useMemo(() => {
+      if (!board) return null;
+      return {
+        projectId: board.project.id,
+        projectName: board.project.name,
+        projectKey: board.project.key,
+        isMaster: false,
+        view: {
+          columns: board.columns.map((c) => c.name + ' (' + c.tasks.length + ')'),
+          tasks: board.columns.reduce((n, c) => n + c.tasks.length, 0),
+          search: search || undefined,
+          priorityFilter: priority || undefined,
+          assigneeFilter: (board.members || members).find((m) => m.id === assignee)?.name,
+        },
+        openTask: taskSheet?.task || null,
+        openTaskDraft: Boolean(taskSheet && !taskSheet.task),
+      };
+    }, [board, members, search, priority, assignee, taskSheet]),
+  );
 
   const move = async (task, target) => {
     setBoard((b) => moveOnBoard(b, task, target));
@@ -90,7 +116,7 @@ export default function ProjectBoardPage() {
       projectName: board.project.name,
       projectKey: board.project.key,
       projectColor: board.project.color,
-      assignee: members.find((m) => m.id === payload.assigneeId) || null,
+      assignee: (board.members || members).find((m) => m.id === payload.assigneeId) || null,
     });
     setBoard((b) => addTaskToBoard(b, draft, draft.columnId));
     notify('Tarefa criada', 'success');
@@ -171,8 +197,9 @@ export default function ProjectBoardPage() {
   if (!board) return <CachedGate error={error} onRetry={reload} />;
 
   const { project } = board;
+  const roster = board.members?.length ? board.members : members;
   const Icon = projectIcons[project.icon] || projectIcons.layers;
-  const team = members.filter((m) => board.columns.some((c) => c.tasks.some((t) => t.assigneeId === m.id)));
+  const team = roster;
   const total = board.columns.reduce((n, c) => n + c.tasks.length, 0);
 
   return (
@@ -196,15 +223,20 @@ export default function ProjectBoardPage() {
             <Dropdown value={priority} options={PRIORITY_FILTERS} onChange={setPriority} />
             <Dropdown
               value={assignee}
-              options={[{ value: '', label: 'Time todo' }, ...members.map((m) => ({ value: m.id, label: m.name, dot: m.color }))]}
+              options={[{ value: '', label: 'Time todo' }, ...roster.map((m) => ({ value: m.id, label: m.name, dot: m.color }))]}
               onChange={setAssignee}
             />
           </>
         }
         action={
-          <button type="button" onClick={() => setTaskSheet({ columnId: board.columns[0]?.id })} className="btn-primary">
-            <IconPlus size={14} /> Nova tarefa
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setInviteOpen(true)} className="btn-ghost">
+              <IconUsers size={14} /> Convidar
+            </button>
+            <button type="button" onClick={() => setTaskSheet({ columnId: board.columns[0]?.id })} className="btn-primary">
+              <IconPlus size={14} /> Nova tarefa
+            </button>
+          </div>
         }
       />
 
@@ -252,10 +284,13 @@ export default function ProjectBoardPage() {
         task={taskSheet?.task}
         defaultColumnId={taskSheet?.columnId}
         columns={board.columns}
+        people={roster}
         onClose={() => setTaskSheet(null)}
         onSave={saveTask}
         onDelete={removeTask}
       />
+
+      <InviteSheet open={inviteOpen} project={project} onClose={() => setInviteOpen(false)} />
 
       <ColumnSheet
         open={!!columnSheet}

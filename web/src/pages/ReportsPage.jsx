@@ -14,6 +14,7 @@ import { api } from '../lib/api';
 import { pad2 } from '../lib/format';
 import useAllColumns from '../lib/useAllColumns';
 import { useApp } from '../context/AppContext';
+import { useAssistantContext } from '../context/ChatContext';
 import useDashboardScope from '../lib/useDashboardScope';
 import { taskPath } from '../lib/taskScope';
 
@@ -35,6 +36,23 @@ export default function ReportsPage() {
   const sheetColumns = useMemo(
     () => (projectId ? columns.filter((c) => c.projectId === projectId) : columns),
     [columns, projectId],
+  );
+
+  /* o assistente enxerga os numeros desta tela */
+  useAssistantContext(
+    'reports',
+    useMemo(
+      () => ({
+        view: {
+          period,
+          search: search || undefined,
+          stats: data?.stats || undefined,
+          insights: data?.insights?.length ?? undefined,
+          newTaskSheet: creating || undefined,
+        },
+      }),
+      [period, search, data, creating],
+    ),
   );
 
   const openCreate = () => setCreating(true);

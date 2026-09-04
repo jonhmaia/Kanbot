@@ -8,8 +8,9 @@ const COLUMN_COLORS = ['#6E7A85', '#F5A524', '#BFE3F2', '#8FE3B0', '#E5484D', '#
 
 /* ------------------------------------------------------------ TaskSheet */
 
-export function TaskSheet({ open, task, columns = [], defaultColumnId, onClose, onSave, onDelete }) {
+export function TaskSheet({ open, task, columns = [], defaultColumnId, onClose, onSave, onDelete, people }) {
   const { members } = useApp();
+  const roster = people?.length ? people : members;
   const [form, setForm] = useState(null);
 
   useEffect(() => {
@@ -111,7 +112,7 @@ export function TaskSheet({ open, task, columns = [], defaultColumnId, onClose, 
             >
               Sem responsavel
             </button>
-            {members.map((m) => (
+            {roster.map((m) => (
               <button
                 key={m.id}
                 type="button"

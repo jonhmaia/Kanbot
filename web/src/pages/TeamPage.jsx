@@ -1,16 +1,38 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
+import InviteSheet from '../components/project/InviteSheet';
 import { Avatar, Card } from '../components/ui/Primitives';
-import { IconArrowUpRight } from '../lib/icons';
+import { useApp } from '../context/AppContext';
+import { useAssistantContext } from '../context/ChatContext';
+import { IconArrowUpRight, IconPlus } from '../lib/icons';
 import { relativeTime } from '../lib/format';
+import { presenceMeta } from '../lib/profile';
 import useDashboardScope from '../lib/useDashboardScope';
 import { taskPath } from '../lib/taskScope';
 
 export default function TeamPage() {
   const navigate = useNavigate();
+  const { projects } = useApp();
   const { scope, isMaster, data } = useDashboardScope();
   const [search, setSearch] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const project = projects.find((p) => p.id === scope);
+
+  /* o assistente enxerga o time desta tela */
+  useAssistantContext(
+    'team',
+    useMemo(
+      () => ({
+        view: {
+          people: data?.workload?.length ?? undefined,
+          overloaded: data?.workload?.filter((m) => m.utilization > 100).map((m) => m.name),
+          search: search || undefined,
+        },
+      }),
+      [data, search],
+    ),
+  );
 
   if (!data) return <div className="px-7 pt-24"><div className="h-[400px] animate-pulseSoft rounded-4xl bg-white/[0.04]" /></div>;
 
@@ -20,10 +42,17 @@ export default function TeamPage() {
     <>
       <PageHeader
         title="Team"
-        eyebrow={data.workload.length + (isMaster ? ' pessoas neste workspace' : ' pessoas neste projeto')}
+        eyebrow={data.workload.length + (isMaster ? ' pessoas nos seus projetos' : ' pessoas neste projeto')}
         searchValue={search}
         onSearch={setSearch}
         searchPlaceholder="Buscar pessoa..."
+        action={
+          !isMaster && (
+            <button type="button" onClick={() => setInviteOpen(true)} className="btn-primary">
+              <IconPlus size={14} /> Convidar
+            </button>
+          )
+        }
       />
 
       <div className="grid gap-4 px-5 pb-10 sm:px-7 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -33,10 +62,17 @@ export default function TeamPage() {
             return (
               <Card key={m.id} className="grain p-5">
                 <div className="flex items-center gap-3">
-                  <Avatar member={m} size={42} />
+                  <button type="button" onClick={() => navigate('/u/' + m.id)} className="rounded-full">
+                    <Avatar member={m} size={42} />
+                  </button>
                   <div className="min-w-0">
-                    <p className="truncate text-[14px] text-chalk">{m.name}</p>
-                    <p className="truncate text-[11.5px] text-smoke">{m.role}</p>
+                    <button type="button" onClick={() => navigate('/u/' + m.id)} className="truncate text-[14px] text-chalk hover:underline">
+                      {m.name}
+                    </button>
+                    <p className="truncate text-[11.5px] text-smoke">
+                      Nv. {m.level || 1} · {presenceMeta(m.presence).label}
+                      {m.role ? ' · ' + m.role : ''}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -97,6 +133,8 @@ export default function TeamPage() {
           </div>
         </Card>
       </div>
+
+      <InviteSheet open={inviteOpen} project={project} onClose={() => setInviteOpen(false)} />
     </>
   );
 }

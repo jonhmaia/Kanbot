@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import TopNav from './components/layout/TopNav';
 import TasksLayout, {
   RedirectLegacyMaster,
@@ -7,6 +7,8 @@ import TasksLayout, {
 } from './components/layout/TasksLayout';
 import { Toast } from './components/ui/Primitives';
 import LoginPage from './pages/LoginPage';
+import InvitePage from './pages/InvitePage';
+import ProfilePage from './pages/ProfilePage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectBoardPage from './pages/ProjectBoardPage';
 import MasterBoardPage from './pages/MasterBoardPage';
@@ -23,6 +25,8 @@ import { useApp } from './context/AppContext';
 
 export default function App() {
   const { error, toast, session, loadBootstrap, currentUser } = useApp();
+  const location = useLocation();
+  const inviteToken = location.pathname.startsWith('/invite/') ? location.pathname.slice('/invite/'.length).split('/')[0] : '';
 
   if (session === undefined && !currentUser) {
     return (
@@ -37,7 +41,7 @@ export default function App() {
   if (session === null) {
     return (
       <>
-        <LoginPage onReady={loadBootstrap} />
+        {inviteToken ? <InvitePage token={inviteToken} onReady={loadBootstrap} /> : <LoginPage onReady={loadBootstrap} />}
         <Toast toast={toast} />
       </>
     );
@@ -64,7 +68,7 @@ export default function App() {
         <TopNav />
         <main className="mx-auto w-full max-w-[1560px]">
           <Routes>
-            <Route path="/" element={<RedirectToTasks tab="reports" />} />
+            <Route path="/" element={<Navigate to="/projects" replace />} />
             <Route path="/tasks" element={<TasksLayout />}>
               <Route index element={<RedirectToTasks tab="reports" />} />
               <Route path="master" element={<MasterBoardPage />} />
@@ -83,8 +87,11 @@ export default function App() {
             <Route path="/insights" element={<RedirectToTasks tab="insights" />} />
             <Route path="/reports" element={<RedirectToTasks tab="reports" />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/me" element={<ProfilePage />} />
+            <Route path="/u/:userId" element={<ProfilePage />} />
+            <Route path="/invite/:token" element={<InvitePage />} />
             <Route path="/focus" element={<FocusHistoryPage />} />
-            <Route path="*" element={<RedirectToTasks tab="reports" />} />
+            <Route path="*" element={<Navigate to="/projects" replace />} />
           </Routes>
         </main>
         <ChatDock />

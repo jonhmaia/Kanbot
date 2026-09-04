@@ -3,7 +3,11 @@ import { api } from '../lib/api';
 import { cacheClear, cacheGet, cacheSet } from '../lib/cache';
 import { draftProject } from '../lib/optimistic';
 import { supabase, supabaseConfigured } from '../lib/supabase';
-import { applyAtmosphere, persistAtmosphere, readAtmosphereId } from '../lib/atmospheres';
+import { applyAtmosphere, isAtmosphereId, persistAtmosphere, readAtmosphereId } from '../lib/atmospheres';
+import { normalizePlan } from '../lib/plans';
+import { persistIslandProject } from '../lib/islandPrefs';
+import { isIslandWindow } from '../lib/desktop';
+import { setPrefUser } from '../lib/userPrefs';
 import { DEFAULT_TAB, MASTER_SCOPE, TASK_SCOPE_KEY, TASK_TAB_KEY } from '../lib/taskScope';
 
 const AppContext = createContext(null);
@@ -33,7 +37,15 @@ export function AppProvider({ children }) {
   }, []);
 
   const setAtmosphere = useCallback((id) => {
-    setAtmosphereState(persistAtmosphere(id));
+    const next = persistAtmosphere(id);
+    setAtmosphereState(next);
+    setBoot((current) => {
+      if (!current?.currentUser) return current;
+      const updated = { ...current, currentUser: { ...current.currentUser, atmosphere: next } };
+      cacheSet('bootstrap', updated);
+      return updated;
+    });
+    api.updateProfile({ atmosphere: next }).catch(() => {});
   }, []);
 
   const notify = useCallback((message, tone = 'info') => {
@@ -47,6 +59,16 @@ export function AppProvider({ children }) {
     setWorkspaceId((current) => current || data.workspaces[0]?.id || null);
     setProjects(data.projects);
     setError(null);
+
+    const remote = data.currentUser?.atmosphere;
+    const local = readAtmosphereId();
+    if (isAtmosphereId(remote)) {
+      setAtmosphereState(persistAtmosphere(remote));
+    } else if (isAtmosphereId(local)) {
+      setAtmosphereState(persistAtmosphere(local));
+      api.updateProfile({ atmosphere: local }).catch(() => {});
+    }
+
     return data;
   }, []);
 
@@ -56,7 +78,7 @@ export function AppProvider({ children }) {
   }, [applyBoot]);
 
   const loadProjects = useCallback(async () => {
-    const list = await api.projects(workspaceId);
+    const list = await api.projects();
     setProjects(list);
     setBoot((current) => {
       if (!current) return current;
@@ -65,7 +87,7 @@ export function AppProvider({ children }) {
       return next;
     });
     return list;
-  }, [workspaceId]);
+  }, []);
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -78,10 +100,12 @@ export function AppProvider({ children }) {
     let alive = true;
     supabase.auth.getSession().then(({ data }) => {
       if (!alive) return;
+      setPrefUser(data.session?.user?.id || null);
       setSession(data.session ?? null);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+      setPrefUser(next?.user?.id || null);
       setSession(next);
     });
 
@@ -94,6 +118,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (session === undefined) return;
     if (!session) {
+      setPrefUser(null);
       cacheClear();
       setBoot(null);
       setProjects([]);
@@ -102,6 +127,9 @@ export function AppProvider({ children }) {
       setLoading(false);
       return;
     }
+
+    setPrefUser(session.user?.id || null);
+    setAtmosphereState(applyAtmosphere(readAtmosphereId()));
 
     let alive = true;
     if (!cacheGet('bootstrap')) setLoading(true);
@@ -122,6 +150,16 @@ export function AppProvider({ children }) {
     if (!projects.length) return;
     if (!projects.some((p) => p.id === taskScope)) setTaskScope(MASTER_SCOPE);
   }, [projects, taskScope, setTaskScope]);
+
+  useEffect(() => {
+    if (isIslandWindow()) return;
+    if (taskScope === MASTER_SCOPE) {
+      persistIslandProject({ id: null, color: null });
+      return;
+    }
+    const project = projects.find((p) => p.id === taskScope);
+    persistIslandProject(project ? { id: project.id, color: project.color } : { id: null, color: null });
+  }, [projects, taskScope]);
 
   const createProject = useCallback(
     async (payload) => {
@@ -174,9 +212,60 @@ export function AppProvider({ children }) {
     [notify, taskScope, setTaskScope],
   );
 
+  const setWorkspacePlan = useCallback(
+    async (raw) => {
+      if (!workspaceId) return;
+      const plan = normalizePlan(raw);
+      let snapshot = null;
+      setBoot((current) => {
+        if (!current) return current;
+        snapshot = current;
+        const workspaces = current.workspaces.map((w) => (w.id === workspaceId ? { ...w, plan } : w));
+        const next = { ...current, workspaces };
+        cacheSet('bootstrap', next);
+        return next;
+      });
+      try {
+        const updated = await api.updateWorkspace(workspaceId, { plan });
+        setBoot((current) => {
+          if (!current) return current;
+          const workspaces = current.workspaces.map((w) => (w.id === updated.id ? { ...w, plan: updated.plan } : w));
+          const next = { ...current, workspaces };
+          cacheSet('bootstrap', next);
+          return next;
+        });
+        notify('Plano salvo', 'success');
+      } catch (e) {
+        if (snapshot) {
+          cacheSet('bootstrap', snapshot);
+          setBoot(snapshot);
+        }
+        notify(e.message, 'warn');
+      }
+    },
+    [workspaceId, notify],
+  );
+
+  const refreshCurrentUser = useCallback(async () => {
+    const profile = await api.getProfile(session?.user?.id || boot?.currentUser?.id);
+    if (!profile) return profile;
+    setBoot((current) => {
+      if (!current) return current;
+      const members = current.members.some((m) => m.id === profile.id)
+        ? current.members.map((m) => (m.id === profile.id ? { ...m, ...profile } : m))
+        : [profile, ...current.members];
+      const next = { ...current, currentUser: { ...current.currentUser, ...profile }, members };
+      cacheSet('bootstrap', next);
+      return next;
+    });
+    return profile;
+  }, [session, boot]);
+
   const signOut = useCallback(async () => {
     await api.signOut();
+    setPrefUser(null);
     cacheClear();
+    persistIslandProject({ id: null, color: null });
     setBoot(null);
     setProjects([]);
     setSession(null);
@@ -189,6 +278,8 @@ export function AppProvider({ children }) {
       error,
       currentUser: boot?.currentUser ?? null,
       members: boot?.members ?? [],
+      pendingInvites: boot?.pendingInvites ?? [],
+      refreshCurrentUser,
       workspaces: boot?.workspaces ?? [],
       notifications: boot?.notifications ?? [],
       statuses: boot?.statuses ?? [],
@@ -205,6 +296,7 @@ export function AppProvider({ children }) {
       updateProject,
       removeProject,
       signOut,
+      setWorkspacePlan,
       atmosphere,
       setAtmosphere,
       toast,
@@ -215,6 +307,7 @@ export function AppProvider({ children }) {
       loading,
       error,
       boot,
+      refreshCurrentUser,
       workspaceId,
       taskScope,
       setTaskScope,
@@ -227,6 +320,7 @@ export function AppProvider({ children }) {
       updateProject,
       removeProject,
       signOut,
+      setWorkspacePlan,
       atmosphere,
       setAtmosphere,
       toast,

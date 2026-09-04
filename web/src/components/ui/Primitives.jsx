@@ -7,7 +7,7 @@ export { DatePicker } from './DatePicker';
 
 /* ------------------------------------------------------------------ Card */
 
-export function Card({ className = '', children, expandable = false, onExpand, tone = 'default' }) {
+export function Card({ className = '', children, expandable = false, onExpand, tone = 'default', ...props }) {
   const tones = {
     default: 'card',
     quiet: 'card-quiet',
@@ -15,7 +15,7 @@ export function Card({ className = '', children, expandable = false, onExpand, t
     ice: 'relative overflow-hidden rounded-4xl bg-ice-card text-[#0F2833] shadow-lift',
   };
   return (
-    <section className={tones[tone] + ' ' + className}>
+    <section className={tones[tone] + ' ' + className} {...props}>
       {expandable && (
         <button type="button" className="expand-btn z-10" onClick={onExpand} aria-label="Expandir">
           <IconExpand size={13} />
@@ -39,10 +39,12 @@ export function CardHeader({ title, right, className = '' }) {
 
 export function Avatar({ member, size = 28, ring = true, className = '' }) {
   const label = member?.initials || initialsOf(member?.name || '?');
+  const presence = member?.presence;
+  const presenceColor = presence === 'focusing' ? '#F5A524' : presence === 'away' ? '#6E7A85' : presence === 'available' ? '#8FE3B0' : null;
   return (
     <span
       className={
-        'inline-grid shrink-0 place-items-center rounded-full font-medium leading-none ' +
+        'relative inline-grid shrink-0 place-items-center rounded-full font-medium leading-none ' +
         (ring ? 'ring-1 ring-white/15 ' : '') +
         className
       }
@@ -56,6 +58,12 @@ export function Avatar({ member, size = 28, ring = true, className = '' }) {
       title={member?.name}
     >
       {label}
+      {presenceColor && size >= 28 && (
+        <i
+          className="absolute bottom-0 right-0 rounded-full ring-2 ring-[#1a1a1b]"
+          style={{ width: Math.max(6, size * 0.22), height: Math.max(6, size * 0.22), background: presenceColor }}
+        />
+      )}
     </span>
   );
 }
@@ -181,6 +189,25 @@ export function Field({ label, children, hint }) {
       {children}
       {hint && <span className="mt-1 block text-[11px] text-smoke">{hint}</span>}
     </label>
+  );
+}
+
+export function Switch({ checked, onChange, label }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={'relative h-7 w-12 shrink-0 rounded-full transition ' + (checked ? 'bg-amber' : 'bg-white/10')}
+    >
+      <i
+        className={
+          'absolute top-0.5 h-6 w-6 rounded-full bg-white transition ' + (checked ? 'left-5' : 'left-0.5')
+        }
+      />
+    </button>
   );
 }
 

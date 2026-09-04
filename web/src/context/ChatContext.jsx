@@ -1,25 +1,55 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { listenDesktop } from '../lib/desktop';
+import { contextChips, contextLabel, contextPayload, mergeContext, routeContext } from '../lib/ai/context';
 import { useApp } from './AppContext';
-
-export const DEFAULT_CHIPS = [
-  'Resumo do sprint',
-  'Cria uma tarefa no SFR',
-  'Quem esta sobrecarregado?',
-  'Mostrar bloqueios',
-];
+import { useFocus } from './FocusContext';
 
 const ChatContext = createContext(null);
 
+/**
+ * Assistente unico do Kanbot. Uma so conversa, aberta pelo botao do assistente,
+ * sempre ciente da tela atual e da tarefa aberta.
+ */
 export function ChatProvider({ children }) {
-  const { loadProjects, loadBootstrap, notify, currentUser } = useApp();
+  const { loadProjects, loadBootstrap, notify, currentUser, projects } = useApp();
+  const { activeTask, running, session: focusSession } = useFocus();
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
   const [messages, setMessages] = useState([]);
   const [value, setValue] = useState('');
   const [thinking, setThinking] = useState(false);
-  const [chips, setChips] = useState(DEFAULT_CHIPS);
+  const [suggested, setSuggested] = useState(null);
+  const [extras, setExtras] = useState({});
+
+  /* cada tela publica o que ela sabe (tarefa aberta, filtros, numeros da view) */
+  const publishContext = useCallback((source, payload) => {
+    setExtras((current) => {
+      if (!payload) {
+        if (!(source in current)) return current;
+        const next = { ...current };
+        delete next[source];
+        return next;
+      }
+      return { ...current, [source]: payload };
+    });
+  }, []);
+
+  /* sessao de foco em andamento tambem e contexto: "a tarefa que estou tocando" */
+  const focusPhase = focusSession?.phase;
+  const focus = useMemo(
+    () => (running && activeTask ? { taskId: activeTask.id, title: activeTask.title, phase: focusPhase } : null),
+    [running, activeTask?.id, activeTask?.title, focusPhase],
+  );
+
+  const context = useMemo(
+    () => ({ ...mergeContext(routeContext(pathname, { projects }), extras), focus }),
+    [pathname, projects, extras, focus],
+  );
+
+  const chips = suggested?.length ? suggested : contextChips(context);
 
   const send = useCallback(
     async (text) => {
@@ -30,7 +60,7 @@ export function ChatProvider({ children }) {
       setMessages((m) => [...m, { role: 'user', text: prompt }]);
       setThinking(true);
       try {
-        const res = await api.ask(prompt, history);
+        const res = await api.ask(prompt, history, contextPayload(context));
         if (res.applied?.some((a) => a.ok)) {
           loadProjects();
           loadBootstrap();
@@ -54,19 +84,27 @@ export function ChatProvider({ children }) {
             applied: res.applied || [],
           },
         ]);
-        if (res.suggestions?.length) setChips(res.suggestions);
+        if (res.suggestions?.length) setSuggested(res.suggestions);
       } catch {
         setMessages((m) => [...m, { role: 'bot', text: 'Nao consegui responder agora.' }]);
       } finally {
         setThinking(false);
       }
     },
-    [value, thinking, messages, loadProjects, loadBootstrap, notify],
+    [value, thinking, messages, context, loadProjects, loadBootstrap, notify],
   );
 
-  const focusChat = useCallback(() => {
+  /* abrir o assistente, opcionalmente ja com um texto pronto no input */
+  const focusChat = useCallback((prefill) => {
     setOpen(true);
+    if (typeof prefill === 'string' && prefill) setValue(prefill);
     setFocusNonce((n) => n + 1);
+  }, []);
+
+  const reset = useCallback(() => {
+    setMessages([]);
+    setSuggested(null);
+    setValue('');
   }, []);
 
   useEffect(() => {
@@ -96,7 +134,11 @@ export function ChatProvider({ children }) {
     thinking,
     chips,
     send,
-    userName: currentUser?.name?.split(' ')[0] || 'Jason',
+    reset,
+    context,
+    contextLabel: contextLabel(context),
+    publishContext,
+    userName: currentUser?.name?.split(' ')[0] || 'voce',
   };
 
   return <ChatContext.Provider value={valueBag}>{children}</ChatContext.Provider>;
@@ -106,4 +148,19 @@ export function useChat() {
   const ctx = useContext(ChatContext);
   if (!ctx) throw new Error('useChat precisa estar dentro de <ChatProvider>');
   return ctx;
+}
+
+/**
+ * Publica o contexto de uma tela no assistente enquanto ela estiver montada.
+ * `source` identifica a tela; `payload` e serializado para evitar re-publicacao
+ * a cada render.
+ */
+export function useAssistantContext(source, payload) {
+  const { publishContext } = useChat();
+  const json = JSON.stringify(payload ?? null);
+
+  useEffect(() => {
+    publishContext(source, JSON.parse(json));
+    return () => publishContext(source, null);
+  }, [source, json, publishContext]);
 }

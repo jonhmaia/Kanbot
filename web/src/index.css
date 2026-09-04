@@ -11,6 +11,10 @@
     --bg-3: #262629;
     --bg-4: #1b1b1e;
     --bg-5: #131315;
+    --accent: #F5A524;
+    --accent-soft: #FFC15E;
+    --cool: #BFE3F2;
+    --cool-deep: #5FA8C9;
   }
 
   @property --bg-0 {
@@ -42,6 +46,26 @@
     syntax: '<color>';
     inherits: true;
     initial-value: #131315;
+  }
+  @property --accent {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #F5A524;
+  }
+  @property --accent-soft {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #FFC15E;
+  }
+  @property --cool {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #BFE3F2;
+  }
+  @property --cool-deep {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: #5FA8C9;
   }
 
   * {
@@ -78,6 +102,10 @@
       --bg-3 0.45s ease,
       --bg-4 0.45s ease,
       --bg-5 0.45s ease,
+      --accent 0.45s ease,
+      --accent-soft 0.45s ease,
+      --cool 0.45s ease,
+      --cool-deep 0.45s ease,
       background-color 0.45s ease;
     background-attachment: fixed;
     color: #ededed;
@@ -191,6 +219,14 @@
       transparent 1.5px,
       transparent 6px
     );
+  }
+
+  .text-accent {
+    color: var(--accent);
+  }
+
+  .bg-accent {
+    background-color: var(--accent);
   }
 
   .grain::after {

@@ -113,13 +113,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { prompt = '', history = [], catalog = {} } = await req.json();
+    const { prompt = '', history = [], catalog = {}, context = null } = await req.json();
     const messages = [
       {
         role: 'system',
         content:
           'Voce e o Kanbot. Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Se o usuario pedir criar projeto, criar tarefa ou editar tarefa, preencha actions. Consultas: actions vazio.\n\nCATALOGO:\n' +
-          JSON.stringify(catalog),
+          JSON.stringify(catalog) +
+          (context
+            ? '\n\nCONTEXTO ATUAL DA TELA (o usuario esta olhando isto agora):\n' +
+              JSON.stringify(context) +
+              '\n"esta tarefa"/"isso" = openTask do contexto (use o id em update_task). "este projeto"/"aqui" = projectId do contexto.'
+            : ''),
       },
       ...history.slice(-8).map((m: { role?: string; text?: string }) => ({
         role: m.role === 'bot' || m.role === 'assistant' ? 'assistant' : 'user',

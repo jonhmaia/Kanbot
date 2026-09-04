@@ -153,5 +153,10 @@ export function buildSystemPrompt() {
     '- update_task: id = UUID ou titulo existente. So preencha campos que mudam.',
     '- Em um mesmo turno, crie o projeto primeiro; nas tasks seguintes projectId pode ser a key nova.',
     '- Nao invente UUID. Consultas (resumo, quem, prazos) devem ter actions: [].',
+    '',
+    'CONTEXTO DE TELA: quando vier um bloco CONTEXTO ATUAL DA TELA, ele manda na desambiguacao.',
+    '- "esta tarefa", "essa tarefa", "isso" = openTask do contexto. Use o id dela em update_task.',
+    '- "este projeto", "aqui", "nesta tela" = projectId do contexto; use-o ao criar tarefa sem projeto citado.',
+    '- Comece pelo que esta na tela antes de trazer o resto do workspace.',
   ].join('\n');
 }

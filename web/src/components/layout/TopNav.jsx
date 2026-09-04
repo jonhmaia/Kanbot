@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { IconBell, IconGrid, IconLogo, IconSpark, IconSwatch } from '../../lib/icons';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { IconBell, IconGrid, IconLogo, IconLogout, IconSettings, IconSwatch, IconUser } from '../../lib/icons';
 import { ATMOSPHERES } from '../../lib/atmospheres';
 import { useApp } from '../../context/AppContext';
-import { useChat } from '../../context/ChatContext';
 import AtmospherePicker from '../settings/AtmospherePicker';
 import { Avatar, Dropdown } from '../ui/Primitives';
 import { MenuPortal, useMenu } from '../ui/MenuPortal';
@@ -133,9 +132,15 @@ function NotificationBell() {
   );
 }
 
-function AppLinks({ inTasks, taskScope, className = '' }) {
+function AppLinks({ inTasks, inProjects, taskScope, className = '' }) {
   return (
     <>
+      <NavLink
+        to="/projects"
+        className={() => 'nav-item shrink-0 ' + className + (inProjects ? ' nav-item-active' : '')}
+      >
+        Projetos
+      </NavLink>
       <NavLink
         to={taskPath(taskScope, DEFAULT_TAB)}
         className={() => 'nav-item shrink-0 ' + className + (inTasks ? ' nav-item-active' : '')}
@@ -152,17 +157,89 @@ function AppLinks({ inTasks, taskScope, className = '' }) {
         to="/settings"
         className={({ isActive }) => 'nav-item shrink-0 ' + className + (isActive ? ' nav-item-active' : '')}
       >
-        Settings
+        Configuracoes
       </NavLink>
     </>
   );
 }
 
+function AccountMenu() {
+  const { currentUser, signOut } = useApp();
+  const navigate = useNavigate();
+  const menu = useMenu();
+
+  return (
+    <>
+      <button
+        ref={menu.triggerRef}
+        type="button"
+        onClick={menu.toggle}
+        className="rounded-full ring-1 ring-white/15 transition hover:ring-white/35"
+        aria-label="Conta"
+        title={currentUser?.name || 'Conta'}
+      >
+        <Avatar member={currentUser} size={34} ring={false} />
+      </button>
+      <MenuPortal
+        open={menu.open}
+        onClose={menu.close}
+        triggerRef={menu.triggerRef}
+        panelRef={menu.panelRef}
+        align="right"
+        minWidth={220}
+        role="menu"
+        className="p-2"
+      >
+        <p className="truncate px-2.5 py-2 text-[12.5px] text-chalk">{currentUser?.name}</p>
+        <p className="truncate px-2.5 pb-2 text-[11px] text-smoke">
+          Nv. {currentUser?.level || 1} · {presenceLabel(currentUser?.presence)}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            menu.close();
+            navigate('/me');
+          }}
+          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-dust hover:bg-white/[0.06] hover:text-chalk"
+        >
+          <IconUser size={14} /> Perfil
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            menu.close();
+            navigate('/settings');
+          }}
+          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-dust hover:bg-white/[0.06] hover:text-chalk"
+        >
+          <IconSettings size={14} /> Configuracoes
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            menu.close();
+            signOut();
+          }}
+          className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-dust hover:bg-white/[0.06] hover:text-rose"
+        >
+          <IconLogout size={14} /> Sair
+        </button>
+      </MenuPortal>
+    </>
+  );
+}
+
+function presenceLabel(presence) {
+  if (presence === 'focusing') return 'Em foco';
+  if (presence === 'away') return 'Ausente';
+  return 'Disponivel';
+}
+
 export default function TopNav() {
-  const { currentUser, signOut, taskScope } = useApp();
-  const { toggle, open, thinking } = useChat();
+  const { taskScope } = useApp();
   const { pathname } = useLocation();
   const inTasks = pathname.startsWith('/tasks');
+  const inProjects = pathname.startsWith('/projects');
   const parsed = parseTaskLocation(pathname);
   const activeScope = parsed?.scope || taskScope;
 
@@ -170,45 +247,23 @@ export default function TopNav() {
     <header className="sticky top-0 z-30 px-5 pt-4 sm:px-7 sm:pt-5">
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <IconLogo size={30} />
+          <Link to="/projects" aria-label="Ir para projetos" className="shrink-0">
+            <IconLogo size={30} />
+          </Link>
           <ProjectPicker />
         </div>
 
         <div className="hidden flex-col items-stretch gap-2 xl:flex">
           <nav className={NAV_PILL}>
-            <AppLinks inTasks={inTasks} taskScope={taskScope} />
+            <AppLinks inTasks={inTasks} inProjects={inProjects} taskScope={taskScope} />
           </nav>
           {inTasks && <ModuleTabs scope={activeScope} className={NAV_PILL} />}
         </div>
 
         <div className="col-start-3 flex items-center justify-end gap-2.5">
-          <button
-            type="button"
-            onClick={toggle}
-            className={
-              'relative grid h-9 w-9 place-items-center rounded-full border transition ' +
-              (open
-                ? 'border-amber/40 bg-amber-btn text-[#191100]'
-                : 'border-line bg-white/[0.05] text-dust hover:border-white/20 hover:text-chalk')
-            }
-            aria-label={open ? 'Fechar chat' : 'Abrir chat'}
-            title="Chat"
-          >
-            <IconSpark size={15} />
-            {thinking && !open && (
-              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 animate-pulseSoft rounded-full bg-amber" />
-            )}
-          </button>
           <AtmosphereMenu />
           <NotificationBell />
-          <button
-            type="button"
-            title="Sair"
-            onClick={signOut}
-            className="rounded-full ring-1 ring-white/15 transition hover:ring-white/35"
-          >
-            <Avatar member={currentUser} size={34} ring={false} />
-          </button>
+          <AccountMenu />
         </div>
       </div>
 
@@ -217,6 +272,7 @@ export default function TopNav() {
           <nav className={NAV_PILL_MOBILE}>
             <AppLinks
               inTasks={inTasks}
+              inProjects={inProjects}
               taskScope={taskScope}
               className="border border-transparent"
             />

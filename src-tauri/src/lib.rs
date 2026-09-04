@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager, WindowEvent};
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
+static ISLAND_VISIBLE: AtomicBool = AtomicBool::new(true);
 static ISLAND_EDGE: Mutex<String> = Mutex::new(String::new());
 
 fn set_edge(edge: &str) {
@@ -136,6 +137,26 @@ fn quit_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn hide_island(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(island) = app.get_webview_window("island") {
+        island.hide().map_err(|e| e.to_string())?;
+    }
+    ISLAND_VISIBLE.store(false, Ordering::SeqCst);
+    show_window(&app, "main")
+}
+
+#[tauri::command]
+fn show_island(app: tauri::AppHandle) -> Result<(), String> {
+    let Some(island) = app.get_webview_window("island") else {
+        return Ok(());
+    };
+    apply_island_layout(&island, false, &current_edge())?;
+    island.show().map_err(|e| e.to_string())?;
+    ISLAND_VISIBLE.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+#[tauri::command]
 fn position_island(app: tauri::AppHandle) {
     if let Some(island) = app.get_webview_window("island") {
         place_island(&island, &current_edge());
@@ -197,8 +218,14 @@ pub fn run() {
             match window.label() {
                 "main" => match event {
                     WindowEvent::CloseRequested { api, .. } => {
-                        api.prevent_close();
-                        let _ = window.hide();
+                        if ISLAND_VISIBLE.load(Ordering::SeqCst) {
+                            api.prevent_close();
+                            let _ = window.hide();
+                        } else {
+                            QUITTING.store(true, Ordering::SeqCst);
+                            api.prevent_close();
+                            window.app_handle().exit(0);
+                        }
                     }
                     WindowEvent::Resized(_) => {
                         if window.is_minimized().unwrap_or(false) {
@@ -226,6 +253,8 @@ pub fn run() {
             show_main,
             hide_main,
             quit_app,
+            hide_island,
+            show_island,
             position_island,
             resize_island,
             start_drag_island,

@@ -1,4 +1,8 @@
 import { initialsOf } from './format';
+import { normalizePlan } from './plans';
+
+export const PROFILE_COLUMNS =
+  'id, full_name, email, role_title, color, avatar_url, presence, status_note, xp, level, tasks_completed, focus_minutes, current_streak, longest_streak, atmosphere';
 
 export function mapMember(row) {
   if (!row) return null;
@@ -6,10 +10,40 @@ export function mapMember(row) {
   return {
     id: row.id || row.user_id,
     name,
-    role: row.role_title || row.role || '',
+    role: row.role_title || row.job_title || '',
+    projectRole: row.project_role || row.projectRole || '',
+    workspaceRole: row.workspace_role || '',
     email: row.email || '',
     color: row.color || '#F5A524',
     initials: row.initials || initialsOf(name),
+    avatarUrl: row.avatar_url || row.avatarUrl || '',
+    presence: row.presence || 'available',
+    statusNote: row.status_note || row.statusNote || '',
+    xp: Number(row.xp || 0),
+    level: Number(row.level || 1),
+    tasksCompleted: Number(row.tasks_completed ?? row.tasksCompleted ?? 0),
+    focusMinutes: Number(row.focus_minutes ?? row.focusMinutes ?? 0),
+    currentStreak: Number(row.current_streak ?? row.currentStreak ?? 0),
+    longestStreak: Number(row.longest_streak ?? row.longestStreak ?? 0),
+    atmosphere: row.atmosphere || '',
+  };
+}
+
+export function mapInvite(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    projectId: row.project_id || row.projectId,
+    projectName: row.project_name || row.projectName || '',
+    projectColor: row.project_color || row.projectColor || '#F5A524',
+    email: row.email || '',
+    role: row.role || 'member',
+    token: row.token || '',
+    status: row.status || 'pending',
+    invitedBy: row.invited_by || row.invitedBy || null,
+    inviterName: row.inviter_name || row.inviterName || '',
+    expiresAt: row.expires_at || row.expiresAt || null,
+    createdAt: row.created_at || row.createdAt || null,
   };
 }
 
@@ -18,7 +52,7 @@ export function mapWorkspace(row) {
     id: row.id,
     name: row.name,
     slug: row.slug,
-    plan: row.plan,
+    plan: normalizePlan(row.plan),
   };
 }
 
@@ -139,6 +173,21 @@ export function mapActivity(row, membersById = {}) {
     target,
     projectId: row.project_id,
     at: row.created_at,
+  };
+}
+
+export function mapFocusSession(row) {
+  if (!row) return null;
+  const ended = row.ended_at || row.endedAt;
+  const started = row.started_at || row.startedAt;
+  return {
+    id: row.id,
+    startedAt: started ? new Date(started).getTime() : Date.now(),
+    endedAt: ended ? new Date(ended).getTime() : Date.now(),
+    reason: 'stopped',
+    focusMinutes: Number(row.minutes || 0),
+    completedBlocks: Number(row.blocks || 0),
+    tasks: Array.isArray(row.tasks) ? row.tasks : [],
   };
 }
 

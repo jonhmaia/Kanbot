@@ -63,7 +63,16 @@ function resolveColumn(action, ctx) {
   return columns[0] || null;
 }
 
-export async function applyAskActions(actions, { api, catalog }) {
+const THIS_TASK = /^(esta|essa|a|the|this)\s+(tarefa|task|card)$|^(isto|isso|aqui)$/;
+
+/** "esta tarefa" / id vazio caem na tarefa aberta na tela. */
+function contextTaskRef(ref, context) {
+  const q = asString(ref).trim();
+  if (!q || THIS_TASK.test(fold(q))) return context?.openTask?.id || q;
+  return q;
+}
+
+export async function applyAskActions(actions, { api, catalog, context = null }) {
   const ctx = {
     projects: [...(catalog.projects || [])],
     columns: [...(catalog.columns || [])],
@@ -116,7 +125,9 @@ export async function applyAskActions(actions, { api, catalog }) {
       if (action.op === 'create_task') {
         const title = action.title || action.name;
         if (!title) throw new Error('Tarefa sem titulo');
-        const project = pick(ctx.projects, action.projectId, ['name', 'key']);
+        const project =
+          pick(ctx.projects, action.projectId, ['name', 'key']) ||
+          pick(ctx.projects, context?.projectId, ['name', 'key']);
         if (!project) throw new Error('Projeto nao encontrado: ' + (action.projectId || '?'));
         const column = resolveColumn({ ...action, project }, ctx);
         if (!column) throw new Error('Coluna nao encontrada em ' + project.key);
@@ -138,7 +149,7 @@ export async function applyAskActions(actions, { api, catalog }) {
       }
 
       if (action.op === 'update_task') {
-        const current = pick(ctx.tasks, action.id || action.title, ['title']);
+        const current = pick(ctx.tasks, contextTaskRef(action.id || action.title, context), ['title']);
         if (!current) throw new Error('Tarefa nao encontrada: ' + (action.id || action.title || '?'));
         const patch = {};
         if (action.title) patch.title = action.title;

@@ -9,10 +9,10 @@ export default function WindowsDownloadCard() {
     <Card className="grain p-5">
       <h3 className="card-title">App Windows</h3>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-smoke">
-        Instale o Kanbot no desktop para usar a notch e receber updates sozinho.
+        Notch nativa e atualizacoes automaticas no desktop.
       </p>
       <div className="mt-4">
-        <WindowsDownloadButton className="btn-primary w-full justify-center" />
+        <WindowsDownloadButton className="btn-primary w-full justify-center" quiet />
       </div>
     </Card>
   );

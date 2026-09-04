@@ -214,6 +214,13 @@ export const IconPause = (p) => (
   </Svg>
 );
 
+export const IconSkip = (p) => (
+  <Svg {...p}>
+    <path d="M6 6.5v11l8.5-5.5L6 6.5Z" />
+    <path d="M18 6v12" />
+  </Svg>
+);
+
 export const IconFlame = (p) => (
   <Svg {...p}>
     <path d="M12 3.5s2.2 3.4 2.2 6.1A2.2 2.2 0 1 1 9.6 8C8 10.2 7 12.2 7 14.2a5 5 0 0 0 10 0c0-3.4-2.4-6.4-5-10.7Z" />
@@ -272,6 +279,20 @@ export const IconUser = (p) => (
   </Svg>
 );
 
+export const IconLogout = (p) => (
+  <Svg {...p}>
+    <path d="M10 7V5.8A1.8 1.8 0 0 1 11.8 4h6.4A1.8 1.8 0 0 1 20 5.8v12.4a1.8 1.8 0 0 1-1.8 1.8h-6.4A1.8 1.8 0 0 1 10 18.2V17" />
+    <path d="M4 12h10M11 9l3 3-3 3" />
+  </Svg>
+);
+
+export const IconCopy = (p) => (
+  <Svg {...p}>
+    <rect x="8" y="8" width="10" height="12" rx="2" />
+    <path d="M6 16H5.2A1.2 1.2 0 0 1 4 14.8V5.2A1.2 1.2 0 0 1 5.2 4h9.6A1.2 1.2 0 0 1 16 5.2V6" />
+  </Svg>
+);
+
 export const IconWindows = (p) => (
   <svg width={p.size || 16} height={p.size || 16} viewBox="0 0 24 24" className={p.className} aria-hidden="true" fill="currentColor">
     <path d="M3 5.2 10.4 4.2v7.1H3V5.2Zm8.2-1.2L21 2.6v8.7h-9.8V4ZM3 12.7h7.4v7.1L3 18.8v-6.1Zm8.2 0H21v8.7l-9.8-1.4v-7.3Z" />
@@ -319,9 +340,9 @@ export const IconFlag = (p) => (
   </Svg>
 );
 
-export const IconLogo = ({ size = 30, className = '' }) => (
+export const IconLogo = ({ size = 30, className = '', fill }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" className={className} aria-hidden="true">
-    <circle cx="16" cy="16" r="16" fill="#F5A524" />
+    <circle cx="16" cy="16" r="16" fill={fill || 'var(--accent, #F5A524)'} />
     <rect x="8" y="8.2" width="7.2" height="15.6" rx="3.6" fill="#141415" />
     <rect x="16.8" y="8.2" width="7.2" height="10.4" rx="3.6" fill="#141415" />
   </svg>

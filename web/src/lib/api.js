@@ -8,13 +8,16 @@ import {
   mapActivity,
   mapChecklist,
   mapColumn,
+  mapFocusSession,
   mapInsight,
+  mapInvite,
   mapMember,
   mapNotification,
   mapProject,
   mapStatus,
   mapTask,
   mapWorkspace,
+  PROFILE_COLUMNS,
 } from './map';
 import { supabase } from './supabase';
 
@@ -45,15 +48,74 @@ async function workspaceId() {
   return data;
 }
 
-async function loadMembers(ws) {
+function uniqueMembers(list) {
+  const seen = new Set();
+  return list.filter((m) => {
+    if (!m?.id || seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
+  });
+}
+
+async function loadWorkspaceMembers(ws) {
   const client = await requireSession();
   const { data, error } = await client
     .from('workspace_members')
-    .select('role, profiles:user_id (id, full_name, email, role_title, color)')
+    .select('role, profiles:user_id (' + PROFILE_COLUMNS + ')')
     .eq('workspace_id', ws);
   fail(error);
-  return (data || []).map((row) => mapMember({ ...row.profiles, role: row.role })).filter(Boolean);
+  return (data || [])
+    .map((row) => mapMember({ ...row.profiles, workspace_role: row.role }))
+    .filter(Boolean);
 }
+
+async function loadProjectMembers(projectId) {
+  const client = await requireSession();
+  const { data, error } = await client
+    .from('project_members')
+    .select('role, profiles:user_id (' + PROFILE_COLUMNS + ')')
+    .eq('project_id', projectId);
+  fail(error);
+  return (data || [])
+    .map((row) => mapMember({ ...row.profiles, project_role: row.role }))
+    .filter(Boolean);
+}
+
+async function loadVisibleMembers() {
+  const client = await requireSession();
+  const { data, error } = await client
+    .from('project_members')
+    .select('role, profiles:user_id (' + PROFILE_COLUMNS + ')');
+  fail(error);
+  return uniqueMembers(
+    (data || []).map((row) => mapMember({ ...row.profiles, project_role: row.role })).filter(Boolean),
+  );
+}
+
+async function loadMyProfile() {
+  const client = await requireSession();
+  const { data: userData, error: userErr } = await client.auth.getUser();
+  fail(userErr);
+  if (!userData.user) return null;
+  const { data, error } = await client
+    .from('profiles')
+    .select(PROFILE_COLUMNS)
+    .eq('id', userData.user.id)
+    .maybeSingle();
+  fail(error);
+  return (
+    mapMember(data) ||
+    mapMember({
+      id: userData.user.id,
+      full_name: userData.user.user_metadata?.full_name || userData.user.email,
+      email: userData.user.email,
+      role_title: '',
+      color: '#F5A524',
+    })
+  );
+}
+
+const loadMembers = loadWorkspaceMembers;
 
 function membersById(members) {
   return Object.fromEntries(members.map((m) => [m.id, m]));
@@ -264,6 +326,14 @@ export const api = {
     fail(error);
   },
 
+  resetPassword: async (email) => {
+    const client = await requireClient();
+    const { error } = await client.auth.resetPasswordForEmail(email, {
+      redirectTo: (typeof window !== 'undefined' ? window.location.origin : '') + '/settings',
+    });
+    fail(error);
+  },
+
   bootstrap: async () => {
     const client = await requireSession();
     const { data: userData, error: userErr } = await client.auth.getUser();
@@ -271,14 +341,12 @@ export const api = {
     if (!userData.user) throw new Error('Sessao expirada');
 
     const ws = await workspaceId();
-    const members = await loadMembers(ws);
-    const currentUser = members.find((m) => m.id === userData.user.id) || mapMember({
-      id: userData.user.id,
-      full_name: userData.user.user_metadata?.full_name || userData.user.email,
-      email: userData.user.email,
-      role_title: '',
-      color: '#F5A524',
-    });
+    const [members, currentUser, projects] = await Promise.all([
+      loadVisibleMembers(),
+      loadMyProfile(),
+      api.projects(),
+    ]);
+    const people = uniqueMembers([currentUser, ...members].filter(Boolean));
 
     const { data: workspaces, error: wsErr } = await client.from('workspaces').select('*').order('name');
     fail(wsErr);
@@ -293,44 +361,41 @@ export const api = {
     const { data: feed, error: feedErr } = await client
       .from('activity_log')
       .select('*')
-      .eq('workspace_id', ws)
       .order('created_at', { ascending: false })
       .limit(8);
     fail(feedErr);
 
-    const projects = await api.projects(ws);
+    const pendingInvites = await api.listMyInvites().catch(() => []);
 
     return {
-      currentUser,
+      currentUser: people.find((m) => m.id === userData.user.id) || currentUser,
       workspaces: (workspaces || []).map(mapWorkspace),
-      members,
+      members: people,
       projects,
+      pendingInvites,
       notifications: (feed || []).map(mapNotification),
       statuses: (statuses || []).map(mapStatus),
     };
   },
 
   dashboard: async (projectId) => {
-    const ws = await workspaceId();
-    const members = await loadMembers(ws);
-    const allProjects = await api.projects(ws);
+    const members = projectId ? await loadProjectMembers(projectId) : await loadVisibleMembers();
+    const allProjects = await api.projects();
     const projects = projectId ? allProjects.filter((p) => p.id === projectId) : allProjects;
     const tasks = await decorateTasks(
-      await fetchExpandedTasks(projectId ? { projectId } : { workspaceId: ws }),
+      await fetchExpandedTasks(projectId ? { projectId } : {}),
       members,
     );
     const client = await requireSession();
     const { data: insights, error: iErr } = await client
       .from('ai_insights')
       .select('*')
-      .eq('workspace_id', ws)
       .is('dismissed_at', null)
       .order('created_at', { ascending: false });
     fail(iErr);
     let feedQuery = client
       .from('activity_log')
       .select('*')
-      .eq('workspace_id', ws)
       .order('created_at', { ascending: false })
       .limit(6);
     if (projectId) feedQuery = feedQuery.eq('project_id', projectId);
@@ -351,37 +416,42 @@ export const api = {
 
   projects: async (ws) => {
     const client = await requireSession();
-    const workspace = ws || (await workspaceId());
-    const { data: rows, error } = await client
-      .from('projects')
-      .select('*')
-      .eq('workspace_id', workspace)
-      .order('created_at');
+    let query = client.from('projects').select('*').order('created_at');
+    if (ws) query = query.eq('workspace_id', ws);
+    const { data: rows, error } = await query;
     fail(error);
-    const { data: progress, error: pErr } = await client
-      .from('v_project_progress')
-      .select('*')
-      .eq('workspace_id', workspace);
+    const ids = (rows || []).map((r) => r.id);
+    let progressQuery = client.from('v_project_progress').select('*');
+    if (ws) progressQuery = progressQuery.eq('workspace_id', ws);
+    const { data: progress, error: pErr } = await progressQuery;
     fail(pErr);
     const { data: columns, error: cErr } = await client
       .from('board_columns')
       .select('id, project_id')
-      .in(
-        'project_id',
-        (rows || []).map((r) => r.id).concat('00000000-0000-0000-0000-000000000000'),
-      );
+      .in('project_id', ids.concat('00000000-0000-0000-0000-000000000000'));
     fail(cErr);
-    const tasks = await fetchExpandedTasks({ workspaceId: workspace });
+    const { data: roster, error: rErr } = await client
+      .from('project_members')
+      .select('project_id, user_id')
+      .in('project_id', ids.concat('00000000-0000-0000-0000-000000000000'));
+    fail(rErr);
+    const tasks = await fetchExpandedTasks(ws ? { workspaceId: ws } : {});
     const progressById = Object.fromEntries((progress || []).map((p) => [p.project_id, p]));
     const columnCountById = (columns || []).reduce((acc, c) => {
       acc[c.project_id] = (acc[c.project_id] || 0) + 1;
+      return acc;
+    }, {});
+    const membersByProject = (roster || []).reduce((acc, row) => {
+      (acc[row.project_id] ||= []).push(row.user_id);
       return acc;
     }, {});
     return (rows || []).map((row) =>
       mapProject(
         row,
         { ...progressById[row.id], columnCount: columnCountById[row.id] || 0 },
-        [...new Set(tasks.filter((t) => t.project_id === row.id && t.assignee_id).map((t) => t.assignee_id))],
+        membersByProject[row.id] || [
+          ...new Set(tasks.filter((t) => t.project_id === row.id && t.assignee_id).map((t) => t.assignee_id)),
+        ],
       ),
     );
   },
@@ -459,7 +529,7 @@ export const api = {
     const { data: project, error } = await client.from('projects').select('*').eq('id', id).maybeSingle();
     fail(error);
     if (!project) throw new Error('Projeto nao encontrado');
-    const members = await loadMembers(project.workspace_id);
+    const members = await loadProjectMembers(id);
     const { data: columns, error: cErr } = await client
       .from('board_columns')
       .select('*, master_statuses (key)')
@@ -468,7 +538,8 @@ export const api = {
     fail(cErr);
     const tasks = await decorateTasks(await fetchExpandedTasks({ projectId: id }), members);
     return {
-      project: mapProject(project),
+      project: mapProject(project, {}, members.map((m) => m.id)),
+      members,
       columns: (columns || []).map((c) => ({
         ...mapColumn({ ...c, status_key: c.master_statuses?.key }),
         tasks: tasks.filter((tk) => tk.columnId === c.id),
@@ -542,9 +613,8 @@ export const api = {
   },
 
   tasks: async (filter = {}) => {
-    const ws = filter.workspaceId || (await workspaceId());
-    const members = await loadMembers(ws);
-    return decorateTasks(await fetchExpandedTasks({ ...filter, workspaceId: ws }), members);
+    const members = filter.projectId ? await loadProjectMembers(filter.projectId) : await loadVisibleMembers();
+    return decorateTasks(await fetchExpandedTasks(filter), members);
   },
 
   createTask: async (input) => {
@@ -587,7 +657,7 @@ export const api = {
       );
     }
     await logActivity(ws, data.project_id, 'created', data.title);
-    const members = await loadMembers(ws);
+    const members = await loadProjectMembers(data.project_id);
     const rows = (await fetchExpandedTasks({ projectId: data.project_id })).filter((t) => t.id === data.id);
     return (await decorateTasks(rows, members))[0];
   },
@@ -617,7 +687,7 @@ export const api = {
     }
     const ws = current.projects?.workspace_id || (await workspaceId());
     if (patch.labels) await syncTaskLabels(id, ws, patch.labels);
-    const members = await loadMembers(ws);
+    const members = await loadProjectMembers(current.project_id);
     const rows = await fetchExpandedTasks({ projectId: current.project_id });
     return (await decorateTasks(rows.filter((t) => t.id === id), members))[0];
   },
@@ -637,8 +707,7 @@ export const api = {
       p_position: payload.position ?? null,
     });
     fail(error);
-    const ws = await workspaceId();
-    const members = await loadMembers(ws);
+    const members = await loadProjectMembers(data.project_id);
     const rows = await fetchExpandedTasks({ projectId: data.project_id });
     return (await decorateTasks(rows.filter((t) => t.id === id), members))[0];
   },
@@ -646,14 +715,14 @@ export const api = {
   masterBoard: async (filter = {}) => {
     const ws = await workspaceId();
     const client = await requireSession();
-    const members = await loadMembers(ws);
+    const members = await loadVisibleMembers();
     const { data: statuses, error } = await client
       .from('master_statuses')
       .select('*')
       .eq('workspace_id', ws)
       .order('position');
     fail(error);
-    const tasks = await decorateTasks(await fetchExpandedTasks({ workspaceId: ws, ...filter }), members);
+    const tasks = await decorateTasks(await fetchExpandedTasks({ ...filter }), members);
     return {
       columns: (statuses || []).map((s) => ({
         id: s.key,
@@ -734,13 +803,150 @@ export const api = {
     return Array.isArray(data) ? data[0] : data;
   },
 
+  updateWorkspace: async (id, patch) => {
+    const client = await requireSession();
+    const body = {};
+    if (patch.name != null) body.name = patch.name;
+    if (patch.plan != null) body.plan = patch.plan;
+    if (!Object.keys(body).length) throw new Error('Nada para atualizar');
+    const { data, error } = await client.from('workspaces').update(body).eq('id', id).select('*').single();
+    fail(error);
+    return mapWorkspace(data);
+  },
+
   revokeMcpToken: async (id) => {
     const client = await requireSession();
     const { error } = await client.rpc('revoke_mcp_token', { p_id: id });
     fail(error);
   },
 
-  ask: async (prompt = '', history = []) => {
+  getProfile: async (id) => {
+    const client = await requireSession();
+    const { data, error } = await client.from('profiles').select(PROFILE_COLUMNS).eq('id', id).maybeSingle();
+    fail(error);
+    return mapMember(data);
+  },
+
+  updateProfile: async (patch) => {
+    const client = await requireSession();
+    const { data: userData, error: userErr } = await client.auth.getUser();
+    fail(userErr);
+    const body = {};
+    if (patch.name != null) body.full_name = patch.name;
+    if (patch.role != null) body.role_title = patch.role;
+    if (patch.color != null) body.color = patch.color;
+    if (patch.statusNote != null) body.status_note = patch.statusNote;
+    if (patch.presence != null) body.presence = patch.presence;
+    if (patch.atmosphere != null) body.atmosphere = patch.atmosphere;
+    const { data, error } = await client
+      .from('profiles')
+      .update(body)
+      .eq('id', userData.user.id)
+      .select(PROFILE_COLUMNS)
+      .single();
+    fail(error);
+    return mapMember(data);
+  },
+
+  setPresence: async (presence, statusNote) => {
+    const patch = { presence };
+    if (statusNote != null) patch.statusNote = statusNote;
+    return api.updateProfile(patch);
+  },
+
+  listProjectMembers: async (projectId) => loadProjectMembers(projectId),
+
+  removeProjectMember: async (projectId, userId) => {
+    const client = await requireSession();
+    const { error } = await client.rpc('remove_project_member', {
+      p_project_id: projectId,
+      p_user_id: userId,
+    });
+    fail(error);
+  },
+
+  inviteToProject: async (projectId, email, role = 'member') => {
+    const client = await requireSession();
+    const { data, error } = await client.rpc('invite_to_project', {
+      p_project_id: projectId,
+      p_email: email,
+      p_role: role,
+    });
+    fail(error);
+    return mapInvite(Array.isArray(data) ? data[0] : data);
+  },
+
+  listProjectInvites: async (projectId) => {
+    const client = await requireSession();
+    const { data, error } = await client
+      .from('invitations')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    fail(error);
+    return (data || []).map(mapInvite);
+  },
+
+  listMyInvites: async () => {
+    const client = await requireSession();
+    const { data, error } = await client.rpc('list_my_invites');
+    fail(error);
+    const rows = Array.isArray(data) ? data : [];
+    return rows.map(mapInvite);
+  },
+
+  peekInvite: async (token) => {
+    const client = await requireClient();
+    const { data, error } = await client.rpc('peek_invite', { p_token: token });
+    fail(error);
+    if (!data || data.ok === false) {
+      throw new Error(data?.error || 'Convite nao encontrado');
+    }
+    return mapInvite(data);
+  },
+
+  acceptInvite: async (token) => {
+    const client = await requireSession();
+    const { data, error } = await client.rpc('accept_invite', { p_token: token });
+    fail(error);
+    return data;
+  },
+
+  revokeInvite: async (id) => {
+    const client = await requireSession();
+    const { error } = await client.rpc('revoke_invite', { p_id: id });
+    fail(error);
+  },
+
+  recordFocusSession: async (entry) => {
+    const client = await requireSession();
+    const { data, error } = await client.rpc('record_focus_session', {
+      p_minutes: Number(entry.focusMinutes) || 0,
+      p_blocks: Number(entry.completedBlocks) || 0,
+      p_tasks: entry.tasks || [],
+      p_started_at: entry.startedAt ? new Date(entry.startedAt).toISOString() : null,
+      p_ended_at: entry.endedAt ? new Date(entry.endedAt).toISOString() : new Date().toISOString(),
+    });
+    fail(error);
+    return mapFocusSession(data);
+  },
+
+  listFocusHistory: async () => {
+    const client = await requireSession();
+    const { data: userData, error: userErr } = await client.auth.getUser();
+    fail(userErr);
+    const { data, error } = await client
+      .from('focus_sessions')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .order('ended_at', { ascending: false })
+      .limit(80);
+    fail(error);
+    return (data || []).map(mapFocusSession);
+  },
+
+  ask: async (prompt = '', history = [], context = null) => {
     const dash = await api.dashboard();
     const live = {
       tasks: dash.tasks || [],
@@ -766,10 +972,10 @@ export const api = {
       today: TODAY,
     });
 
-    const parsed = await askModel(prompt, history, catalog);
+    const parsed = await askModel(prompt, history, catalog, context);
     let reply = parsed ? parseAssistantReply(parsed, { catalog, live }) : heuristicReply(prompt, { catalog, live });
     if (reply.actions?.length) {
-      const applied = await applyAskActions(reply.actions, { api, catalog });
+      const applied = await applyAskActions(reply.actions, { api, catalog, context });
       if (applied.length) cacheInvalidateWorkspace();
       reply = mergeActionBlocks(reply, applied);
     }
@@ -799,12 +1005,12 @@ async function loadCatalogColumns(projects) {
   }));
 }
 
-async function askModel(prompt, history, catalog) {
+async function askModel(prompt, history, catalog, context) {
   try {
     const res = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, history, catalog }),
+      body: JSON.stringify({ prompt, history, catalog, context }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -818,7 +1024,7 @@ async function askModel(prompt, history, catalog) {
   try {
     const client = await requireSession();
     const { data, error } = await client.functions.invoke('kanbot-ask', {
-      body: { prompt, history, catalog },
+      body: { prompt, history, catalog, context },
     });
     if (!error && (data?.content || data?.answer || data?.blocks)) return data.content || data;
   } catch {

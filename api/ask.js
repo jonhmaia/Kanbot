@@ -18,6 +18,7 @@ export default async function handler(req, res) {
       prompt: body.prompt || '',
       history: body.history || [],
       catalog: body.catalog || {},
+      context: body.context || null,
     });
     res.status(200).json({ content });
   } catch (error) {

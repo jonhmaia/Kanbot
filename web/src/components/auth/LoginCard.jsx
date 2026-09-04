@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '../ui/Primitives';
 import { IconLock, IconMail, IconShield, IconUser } from '../../lib/icons';
 import { api } from '../../lib/api';
@@ -15,15 +15,20 @@ function AuthField({ icon: Icon, label, className = '', ...props }) {
   );
 }
 
-export default function LoginCard({ onReady }) {
+export default function LoginCard({ onReady, defaultEmail = '' }) {
   const [mode, setMode] = useState('signin');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const signup = mode === 'signup';
+  const reset = mode === 'reset';
+
+  useEffect(() => {
+    if (defaultEmail) setEmail(defaultEmail);
+  }, [defaultEmail]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -31,6 +36,12 @@ export default function LoginCard({ onReady }) {
     setError('');
     setInfo('');
     try {
+      if (reset) {
+        await api.resetPassword(email.trim());
+        setInfo('Se o e-mail existir, voce recebe o link para redefinir a senha.');
+        setMode('signin');
+        return;
+      }
       if (signup) {
         const data = await api.signUp(email.trim(), password, name.trim());
         if (!data.session) {
@@ -55,17 +66,19 @@ export default function LoginCard({ onReady }) {
 
       <header className="mb-7">
         <h1 className="font-display text-[26px] font-light tracking-[-0.03em] text-chalk">
-          {signup ? 'Criar conta' : 'Entrar'}
+          {reset ? 'Recuperar senha' : signup ? 'Criar conta' : 'Entrar'}
         </h1>
         <p className="mt-1.5 text-[13px] leading-relaxed text-smoke">
-          {signup
-            ? 'Preencha seus dados para usar o Kanbot no navegador e no app.'
-            : 'E-mail e senha da mesma conta no navegador e no Windows.'}
+          {reset
+            ? 'Enviamos um link se este e-mail tiver uma conta.'
+            : signup
+              ? 'Preencha seus dados para usar o Kanbot no navegador e no app.'
+              : 'E-mail e senha da mesma conta no navegador e no Windows.'}
         </p>
       </header>
 
       <form onSubmit={submit} className="space-y-3">
-        {signup && (
+        {!reset && signup && (
           <AuthField
             icon={IconUser}
             label="Nome"
@@ -85,39 +98,67 @@ export default function LoginCard({ onReady }) {
           autoComplete="email"
           required
         />
-        <AuthField
-          icon={IconLock}
-          type="password"
-          label="Senha"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Sua senha"
-          autoComplete={signup ? 'new-password' : 'current-password'}
-          required
-          minLength={6}
-        />
+        {!reset && (
+          <AuthField
+            icon={IconLock}
+            type="password"
+            label="Senha"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Sua senha"
+            autoComplete={signup ? 'new-password' : 'current-password'}
+            required
+            minLength={6}
+          />
+        )}
 
         {error && <p className="text-[12.5px] text-rose">{error}</p>}
         {info && <p className="text-[12.5px] text-mint">{info}</p>}
 
         <button type="submit" disabled={busy} className="btn-primary mt-1 w-full justify-center py-3">
-          {busy ? (signup ? 'Criando...' : 'Entrando...') : signup ? 'Criar conta' : 'Entrar'}
+          {busy
+            ? reset
+              ? 'Enviando...'
+              : signup
+                ? 'Criando...'
+                : 'Entrando...'
+            : reset
+              ? 'Enviar link'
+              : signup
+                ? 'Criar conta'
+                : 'Entrar'}
         </button>
       </form>
 
       <p className="mt-6 text-center text-[13px] text-smoke">
-        {signup ? 'Ja tem conta?' : 'Nao tem conta?'}{' '}
-        <button
-          type="button"
-          className="text-amber transition hover:underline"
-          onClick={() => {
-            setMode((m) => (m === 'signin' ? 'signup' : 'signin'));
-            setError('');
-            setInfo('');
-          }}
-        >
-          {signup ? 'Entrar' : 'Criar conta'}
-        </button>
+        {reset ? (
+          <button type="button" className="text-amber transition hover:underline" onClick={() => setMode('signin')}>
+            Voltar ao login
+          </button>
+        ) : (
+          <>
+            {signup ? 'Ja tem conta?' : 'Nao tem conta?'}{' '}
+            <button
+              type="button"
+              className="text-amber transition hover:underline"
+              onClick={() => {
+                setMode((m) => (m === 'signin' ? 'signup' : 'signin'));
+                setError('');
+                setInfo('');
+              }}
+            >
+              {signup ? 'Entrar' : 'Criar conta'}
+            </button>
+            {!signup && (
+              <>
+                <span className="mx-2 text-white/20">·</span>
+                <button type="button" className="text-dust transition hover:underline" onClick={() => setMode('reset')}>
+                  Esqueci a senha
+                </button>
+              </>
+            )}
+          </>
+        )}
       </p>
 
       <p className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-smoke">
