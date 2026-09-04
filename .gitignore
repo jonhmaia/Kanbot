@@ -8,3 +8,4 @@ src-tauri/target
 src-tauri/.updater-key
 src-tauri/.updater-key.pub
 .vercel
+**/.tmp-edge-profile
