@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     branches: [main]
+    paths:
+      - 'src-tauri/**'
+      - 'web/src/**'
+      - 'web/package.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/**'
     tags:
       - 'v*'
   workflow_dispatch:

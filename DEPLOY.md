@@ -59,13 +59,10 @@ Windows (escolha um):
 - Azure Trusted Signing: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_TRUSTED_SIGNING_ACCOUNT_NAME`, `AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE`
 - Ou `.pfx`: `WINDOWS_CERTIFICATE` (base64) e `WINDOWS_CERTIFICATE_PASSWORD`
 
-## 5. Primeiro release
+## 5. Release
 
-```bash
-git tag v1.0.1
-git push origin main --tags
-```
+Push na `main` (quando mudam `src-tauri/`, `web/src/` ou o versionamento) gera o `.exe` sozinho. Tag `v*` tambem gera o build de Mac.
 
-O workflow sobe NSIS + DMG + `latest.json` na Release. Instale uma vez; a tag seguinte atualiza o app na abertura.
+O botao da landing chama `/api/download-windows` e baixa o arquivo no dominio do Kanbot.
 
 Enquanto os certificados não estiverem nos Secrets, o build sobe mas o Gatekeeper/SmartScreen ainda bloqueia usuários novos.
