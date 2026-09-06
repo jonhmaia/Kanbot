@@ -1,9 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useFocus } from '../../context/FocusContext';
-import { invokeDesktop, listenDesktop } from '../../lib/desktop';
-import { IconClock, IconClose, IconFlame, IconList, IconLogo, IconPause, IconPlay } from '../../lib/icons';
-import { ISLAND_EDGES, islandHoverExpands, isIslandDock, isIslandSide } from '../../lib/islandPrefs';
+import { dragIslandThenSnap, invokeDesktop } from '../../lib/desktop';
+import { phaseMinutes } from '../../lib/focusSession';
+import { IconClose, IconFlame, IconLogo, IconPause, IconPlay } from '../../lib/icons';
+import { isIslandDock, isIslandSide } from '../../lib/islandPrefs';
+
+const DRAG_PX = 8;
+
+function phaseDurationMs(session) {
+  return Math.max(1, phaseMinutes(session) || 25) * 60 * 1000;
+}
+
+function splitClock(clock) {
+  const [mm = '00', ss = '00'] = String(clock || '00:00').split(':');
+  return { mm, ss };
+}
 
 export default function IslandApp() {
   const { session } = useApp();
@@ -13,6 +25,7 @@ export default function IslandApp() {
     accent,
     session: focus,
     clock,
+    remaining,
     activeTask,
     running,
     paused,
@@ -25,16 +38,16 @@ export default function IslandApp() {
     skipPhase,
     switchTask,
   } = useFocus();
+
   const [expanded, setExpanded] = useState(false);
-  const dragging = useRef(false);
-  const collapsedByUser = useRef(false);
-  const press = useRef(null);
-  const leaveTimer = useRef(null);
+  const drag = useRef({ live: false, x: 0, y: 0 });
+  const skipClickUntil = useRef(0);
+  const edgeRef = useRef(prefs.edge);
   const loggedIn = Boolean(session);
   const side = isIslandSide(prefs.edge);
   const dock = isIslandDock(prefs.edge);
-  const hoverExpand = islandHoverExpands(prefs.edge);
-  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
+  const { mm, ss } = splitClock(clock);
+  const progress = idle ? 0 : Math.min(1, Math.max(0, 1 - remaining / phaseDurationMs(focus)));
 
   useEffect(() => {
     if (prefs.visible === false) {
@@ -46,309 +59,263 @@ export default function IslandApp() {
   }, [prefs.visible]);
 
   useEffect(() => {
-    if (prefs.visible === false) return;
+    if (edgeRef.current !== prefs.edge) {
+      edgeRef.current = prefs.edge;
+      setExpanded(false);
+    }
+  }, [prefs.edge]);
+
+  useEffect(() => {
+    if (prefs.visible === false || drag.current.live) return;
     invokeDesktop('resize_island', { expanded, edge: prefs.edge });
   }, [expanded, prefs.edge, prefs.visible]);
 
-  useEffect(() => {
-    let stop = () => {};
-    listenDesktop('island-edge', (event) => {
-      if (event?.payload) setIslandPrefs({ edge: event.payload });
-    }).then((unlisten) => {
-      stop = unlisten;
-    });
-    return () => stop();
-  }, [setIslandPrefs]);
-
-  const applyExpanded = async (next) => {
-    if (next === expanded || dragging.current) return;
-    setExpanded(next);
-  };
-
-  const onEnter = () => {
-    if (!hoverExpand || dragging.current || collapsedByUser.current) return;
-    clearTimeout(leaveTimer.current);
-    if (loggedIn) applyExpanded(true);
-  };
-
-  const onLeave = () => {
-    if (dragging.current) return;
-    clearTimeout(leaveTimer.current);
-    if (!hoverExpand) return;
-    leaveTimer.current = setTimeout(() => applyExpanded(false), 280);
-  };
-
-  const collapse = () => {
-    collapsedByUser.current = true;
-    applyExpanded(false);
-  };
+  const blocked = () => drag.current.live || Date.now() < skipClickUntil.current;
 
   const hideIsland = () => {
+    setExpanded(false);
     setIslandPrefs({ visible: false });
-    invokeDesktop('hide_island');
   };
 
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
-    press.current = { timer: null, dragged: false };
-    press.current.timer = setTimeout(async () => {
-      dragging.current = true;
-      press.current.dragged = true;
-      applyExpanded(false);
-      await invokeDesktop('start_drag_island');
-    }, 350);
+    drag.current = { live: false, x: e.clientX, y: e.clientY };
   };
 
-  const endPress = async () => {
-    clearTimeout(press.current?.timer);
-    if (press.current?.dragged) {
-      const edge = await invokeDesktop('snap_island', { expanded: false });
-      if (typeof edge === 'string') setIslandPrefs({ edge });
-      setTimeout(() => {
-        dragging.current = false;
-      }, 200);
-    }
-    press.current = null;
+  const onPointerMove = async (e) => {
+    if (drag.current.x == null || drag.current.live) return;
+    const dx = e.clientX - drag.current.x;
+    const dy = e.clientY - drag.current.y;
+    if (dx * dx + dy * dy < DRAG_PX * DRAG_PX) return;
+    drag.current.live = true;
+    skipClickUntil.current = Date.now() + 8000;
+    const edge = await dragIslandThenSnap();
+    skipClickUntil.current = Date.now() + 400;
+    drag.current.live = false;
+    drag.current.x = null;
+    setExpanded(false);
+    if (typeof edge === 'string') setIslandPrefs({ edge });
   };
 
-  const onPillClick = () => {
-    if (dragging.current || press.current?.dragged) return;
-    if (collapsedByUser.current && loggedIn) {
-      collapsedByUser.current = false;
-      applyExpanded(true);
+  const onCollapsedClick = () => {
+    if (blocked()) return;
+    if (!loggedIn) {
+      invokeDesktop('show_main');
       return;
     }
-    if (!expanded && loggedIn && !hoverExpand) {
-      applyExpanded(true);
+    setExpanded(true);
+  };
+
+  const onFocusToggle = (e) => {
+    e.stopPropagation();
+    if (idle) {
+      invokeDesktop('show_main');
       return;
     }
-    if (idle) invokeDesktop('show_main');
-    else if (running) pause();
+    if (running) pause();
     else resume();
   };
 
-  const label = idle ? (loggedIn ? 'Kanbot' : session === undefined ? 'Kanbot' : 'Entrar') : activeTask?.title || 'Foco';
-  const shell = {
-    boxShadow: '0 0 0 1.5px ' + accent + ', 0 10px 28px rgba(0,0,0,0.38)',
+  const onTaskAction = (task, active) => {
+    if (active && running) {
+      pause();
+      return;
+    }
+    switchTask(task.id);
+    if (paused) resume();
+    else if (idle) requestFocus([task]);
   };
 
-  const pillClass = dock
-    ? 'grid h-[52px] w-[52px] place-items-center overflow-hidden rounded-full bg-[#111111]/94 text-chalk backdrop-blur-2xl'
-    : side
-      ? 'flex h-full w-[40px] flex-col items-center justify-center gap-2 rounded-full bg-[#111111]/94 px-1 py-3 text-chalk backdrop-blur-2xl'
-      : 'flex h-[40px] w-full items-center justify-center gap-2.5 rounded-full bg-[#111111]/94 px-3 text-chalk backdrop-blur-2xl';
+  const title = idle ? (loggedIn ? 'Kanbot' : 'Entrar') : activeTask?.title || 'Foco';
+  const phase = idle
+    ? loggedIn
+      ? 'Pronto'
+      : 'Desconectado'
+    : focus.phase === 'break'
+      ? paused
+        ? 'Pausa pronta'
+        : 'Pausa'
+      : paused
+        ? 'Pausado'
+        : 'Foco';
 
-  const pill = (
+  const dragBind = {
+    onPointerDown,
+    onPointerMove,
+  };
+
+  const stopDrag = {
+    onPointerDown: (e) => e.stopPropagation(),
+  };
+
+  const shell = {
+    '--island-accent': accent,
+    boxShadow: 'inset 0 0 0 1.5px ' + accent,
+  };
+
+  const collapsed = !expanded && (
     <button
       type="button"
-      onClick={onPillClick}
-      onPointerDown={onPointerDown}
-      onPointerUp={endPress}
-      onPointerCancel={endPress}
-      className={pillClass}
-      style={shell}
-      aria-label={
-        !expanded && loggedIn && !hoverExpand
-          ? 'Expandir notch'
-          : idle
-            ? 'Abrir Kanbot'
-            : running
-              ? 'Pausar foco'
-              : 'Retomar foco'
+      {...dragBind}
+      onClick={onCollapsedClick}
+      className={
+        'island-shell relative overflow-hidden ' +
+        (dock
+          ? 'grid h-full w-full place-items-center rounded-full'
+          : side
+            ? 'flex h-full w-full flex-col items-center justify-center gap-2 rounded-full px-1 py-3'
+            : 'flex h-full w-full items-center gap-2 rounded-full px-3')
       }
+      style={shell}
+      aria-label={loggedIn ? 'Abrir notch' : 'Abrir Kanbot'}
     >
       {dock ? (
         idle ? (
-          <IconLogo size={52} />
+          <IconLogo size={28} />
         ) : (
-          <span className="text-[11px] font-medium tabular-nums tracking-tight" style={{ color: accent }}>
+          <span className="text-[11px] font-medium tabular-nums" style={{ color: accent }}>
             {clock}
           </span>
         )
+      ) : side ? (
+        <>
+          <span className={'relative grid place-items-center ' + (running ? 'island-live' : '')}>
+            {idle ? <IconLogo size={16} /> : <i className="h-1.5 w-1.5 rounded-full" style={{ background: accent }} />}
+          </span>
+          {!idle && (
+            <span className="flex flex-col items-center font-medium leading-none tabular-nums" style={{ color: accent }}>
+              <span className="text-[11px]">{mm}</span>
+              <span className="py-0.5 text-[7px] text-white/35">:</span>
+              <span className="text-[11px]">{ss}</span>
+            </span>
+          )}
+        </>
       ) : (
         <>
-          {idle ? <IconLogo size={side ? 18 : 20} /> : <IconClock size={side ? 14 : 15} className="text-current" />}
-          <span
-            className={
-              'font-medium tabular-nums tracking-tight ' +
-              (side ? '[writing-mode:vertical-rl] rotate-180 text-[12px]' : 'text-[13px]')
-            }
-            style={{ color: idle ? undefined : accent }}
-          >
-            {idle ? '' : clock}
+          <span className={'relative grid place-items-center ' + (running ? 'island-live' : '')}>
+            {idle ? <IconLogo size={18} /> : <i className="h-2 w-2 rounded-full" style={{ background: accent }} />}
           </span>
-          <span
-            className={
-              'truncate font-medium tracking-tight ' +
-              (side ? '[writing-mode:vertical-rl] rotate-180 text-[11px] max-h-[88px]' : 'max-w-[140px] text-[13px]')
-            }
-          >
-            {label}
+          {!idle && (
+            <span className="text-[13px] font-medium tabular-nums tracking-tight" style={{ color: accent }}>
+              {clock}
+            </span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-left text-[12.5px] font-medium tracking-tight">
+            {title}
           </span>
         </>
+      )}
+      {!idle && !dock && (
+        <i
+          className={'pointer-events-none absolute bg-[var(--island-accent)] ' + (side ? 'bottom-3 top-3 w-0.5 rounded-full' : 'inset-x-4 bottom-1 h-0.5 rounded-full')}
+          style={{
+            opacity: 0.85,
+            transform: side ? `scaleY(${progress})` : `scaleX(${progress})`,
+            transformOrigin: side ? 'top' : 'left',
+          }}
+        />
       )}
     </button>
   );
 
-  const shapePicker = (
-    <div className="flex flex-wrap gap-1">
-      {ISLAND_EDGES.map((item) => {
-        const selected = prefs.edge === item.id;
-        return (
+  const expandedCard = expanded && loggedIn && (
+    <div className="island-shell flex h-full w-full flex-col overflow-hidden rounded-[26px]" style={shell}>
+      <div {...dragBind} className="flex cursor-grab flex-col items-center pt-2 active:cursor-grabbing">
+        <i className="h-1 w-10 rounded-full bg-white/20" />
+      </div>
+      <header className="flex items-start justify-between gap-3 px-4 pb-3 pt-2">
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-smoke">{phase}</p>
+          <p className="mt-1 font-display text-[34px] leading-none tabular-nums tracking-tight" style={{ color: idle ? undefined : accent }}>
+            {idle ? '—' : clock}
+          </p>
+          <p className="mt-2 truncate text-[13px] text-chalk/90">{title}</p>
+        </div>
+        <div className="flex items-center gap-1">
           <button
-            key={item.id}
             type="button"
-            onClick={() => setIslandPrefs({ edge: item.id })}
-            aria-pressed={selected}
-            className={
-              'rounded-full px-2 py-0.5 text-[10px] transition ' +
-              (selected ? 'bg-white/[0.1] text-chalk' : 'text-smoke hover:text-chalk')
-            }
+            {...stopDrag}
+            onClick={onFocusToggle}
+            className="grid h-9 w-9 place-items-center rounded-full text-[#111]"
+            style={{ background: running ? '#E5484D' : accent }}
+            aria-label={idle ? 'Abrir Kanbot' : running ? 'Pausar' : 'Retomar'}
           >
-            {item.name}
+            {running ? <IconPause size={14} /> : <IconPlay size={14} />}
           </button>
-        );
-      })}
-    </div>
-  );
+          <button
+            type="button"
+            {...stopDrag}
+            onClick={() => setExpanded(false)}
+            className="grid h-9 w-9 place-items-center rounded-full text-dust hover:bg-white/[0.06] hover:text-chalk"
+            aria-label="Recolher"
+          >
+            <IconClose size={14} />
+          </button>
+        </div>
+      </header>
 
-  const stacked = side || dock;
-  const panel = expanded && loggedIn && (
-    <div
-      className={
-        (side ? 'h-[344px] w-[316px] ' : dock ? 'h-[344px] w-[368px] ' : 'mt-2 w-full ') +
-        'overflow-hidden rounded-[26px] bg-[#111111]/95 backdrop-blur-2xl'
-      }
-      style={shell}
-    >
-      <div className={'grid h-full ' + (stacked ? 'grid-rows-2' : 'grid-cols-2')}>
-        <section
-          className="flex min-h-0 flex-col border-white/8 p-3.5"
-          style={{
-            borderRight: stacked ? undefined : '1px solid rgba(255,255,255,0.08)',
-            borderBottom: stacked ? '1px solid rgba(255,255,255,0.08)' : undefined,
-          }}
-        >
-          <div className="mb-2 flex items-center gap-1.5 text-smoke">
-            <IconList size={13} />
-            <p className="text-[11px] uppercase tracking-[0.14em]">To Do</p>
-          </div>
-          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
-            {focus.tasks.length === 0 && (
-              <p className="px-1 py-6 text-center text-[12px] text-smoke">Inicie um foco no board</p>
-            )}
-            {focus.tasks.map((task) => {
-              const active = task.id === focus.currentTaskId;
-              return (
-                <div
-                  key={task.id}
-                  className={'flex items-start gap-2 rounded-2xl px-2 py-2 ' + (active ? 'bg-white/[0.06]' : '')}
-                >
-                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full border border-white/25" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12.5px] text-chalk/90">{task.title}</p>
-                    {task.description && (
-                      <p className="mt-0.5 line-clamp-2 text-[11px] text-smoke">{task.description}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      switchTask(task.id);
-                      if (paused) resume();
-                      else if (idle) requestFocus([task]);
-                    }}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full"
-                    style={{ background: active && running ? '#E5484D' : accent, color: '#111' }}
-                    aria-label={active && running ? 'Pausar' : 'Focar'}
-                  >
-                    {active && running ? <IconPause size={12} /> : <IconPlay size={12} />}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="flex flex-col p-3.5">
-          <div className="mb-2 flex items-center justify-between text-smoke">
-            <span className="flex items-center gap-1.5">
-              <IconFlame size={13} style={{ color: accent }} />
-              <p className="text-[11px] uppercase tracking-[0.14em]">Journey Streak</p>
-            </span>
-            <span className="text-[11px] tabular-nums">{streak.filter((c) => c.count).length}d</span>
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {streak.map((cell) => (
-              <i
-                key={cell.key}
-                title={cell.key + ' · ' + cell.count}
-                className="h-3.5 rounded-[3px]"
-                style={{
-                  background: cell.count ? accent : 'rgba(255,255,255,0.08)',
-                  opacity: cell.count ? Math.min(1, 0.35 + cell.count * 0.25) : 1,
-                }}
-              />
-            ))}
-          </div>
-          <div className="mt-3">{shapePicker}</div>
-          <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-            <p className="text-[11px] text-smoke">
-              {idle
-                ? 'Pronto'
-                : focus.phase === 'break'
-                  ? paused
-                    ? 'Pausa pronta'
-                    : 'Pausa'
-                  : paused
-                    ? 'Pausado'
-                    : 'Foco'}
-            </p>
-            <div className="flex items-center gap-1">
-              {!idle && (
-                <button type="button" onClick={skipPhase} className="px-2 text-[11px] text-smoke hover:text-chalk">
-                  Pular
-                </button>
-              )}
-              {!idle && (
-                <button type="button" onClick={stop} className="px-2 text-[11px] text-smoke hover:text-chalk">
-                  Encerrar
-                </button>
-              )}
-              <button type="button" onClick={hideIsland} className="px-2 text-[11px] text-rose/80 hover:text-rose">
-                Esconder
-              </button>
+      <section className="min-h-0 flex-1 space-y-1 overflow-y-auto border-t border-white/[0.06] px-2.5 py-2">
+        {focus.tasks.length === 0 && (
+          <button
+            type="button"
+            onClick={() => invokeDesktop('show_main')}
+            className="flex w-full flex-col items-center gap-1 rounded-2xl px-2 py-6 text-center"
+          >
+            <p className="text-[12px] text-smoke">Inicie um foco no board</p>
+            <p className="text-[11px]" style={{ color: accent }}>Abrir Kanbot</p>
+          </button>
+        )}
+        {focus.tasks.map((task) => {
+          const active = task.id === focus.currentTaskId;
+          return (
+            <div
+              key={task.id}
+              className={'flex items-center gap-2 rounded-2xl px-2 py-2 ' + (active ? 'bg-white/[0.06]' : '')}
+            >
+              <i className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: active ? accent : 'rgba(255,255,255,0.25)' }} />
+              <p className="min-w-0 flex-1 truncate text-[12.5px] text-chalk/90">{task.title}</p>
               <button
                 type="button"
-                onClick={collapse}
-                className="grid h-7 w-7 place-items-center rounded-full text-dust hover:bg-white/[0.06] hover:text-chalk"
-                aria-label="Recolher"
-                title="Recolher"
+                onClick={() => onTaskAction(task, active)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[#111]"
+                style={{ background: active && running ? '#E5484D' : accent }}
+                aria-label={active && running ? 'Pausar' : 'Focar'}
               >
-                <IconClose size={13} />
+                {active && running ? <IconPause size={12} /> : <IconPlay size={12} />}
               </button>
             </div>
-          </div>
-        </section>
-      </div>
+          );
+        })}
+      </section>
+
+      <footer className="flex items-center justify-between gap-2 border-t border-white/[0.06] px-3 py-2.5">
+        <span className="flex items-center gap-1.5 text-smoke">
+          <IconFlame size={12} style={{ color: accent }} />
+          <span className="text-[11px] tabular-nums">{streak.filter((cell) => cell.count).length}d</span>
+        </span>
+        <div className="flex items-center gap-1">
+          {!idle && (
+            <button type="button" onClick={skipPhase} className="rounded-full px-2 py-1 text-[11px] text-smoke hover:text-chalk">
+              Pular
+            </button>
+          )}
+          {!idle && (
+            <button type="button" onClick={stop} className="rounded-full px-2 py-1 text-[11px] text-smoke hover:text-chalk">
+              Encerrar
+            </button>
+          )}
+          <button type="button" onClick={hideIsland} className="rounded-full px-2 py-1 text-[11px] text-rose/80 hover:text-rose">
+            Esconder
+          </button>
+        </div>
+      </footer>
     </div>
   );
 
-  const frame =
-    prefs.edge === 'left'
-      ? 'flex h-full w-full flex-row items-start gap-2 p-1.5'
-      : prefs.edge === 'right'
-        ? 'flex h-full w-full flex-row-reverse items-start gap-2 p-1.5'
-        : prefs.edge === 'chatdock'
-          ? 'flex h-full w-full flex-col-reverse items-end gap-2 p-1.5'
-          : 'flex h-full w-full flex-col items-center ' + (isMac ? 'pt-0' : 'pt-1.5');
-
-  const pillWrap = side ? 'h-full shrink-0' : dock ? 'shrink-0' : expanded ? 'w-[504px]' : 'w-full max-w-[268px]';
-
   return (
-    <div className={'select-none ' + frame} onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      <div className={pillWrap}>{pill}</div>
-      {panel}
+    <div className="island-root flex h-full w-full select-none">
+      {collapsed}
+      {expandedCard}
     </div>
   );
 }

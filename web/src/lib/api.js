@@ -458,25 +458,6 @@ export const api = {
 
   createProject: async (input) => {
     const client = await requireSession();
-    const ws = input.workspaceId || (await workspaceId());
-    const { data: userData } = await client.auth.getUser();
-    const { data, error } = await client
-      .from('projects')
-      .insert({
-        workspace_id: ws,
-        name: input.name?.trim() || 'Novo projeto',
-        key: (input.key || input.name || 'PRJ').slice(0, 3).toUpperCase(),
-        description: input.description || '',
-        color: input.color || '#F5A524',
-        icon: input.icon || 'sparkle',
-        owner_id: input.ownerId || userData.user?.id || null,
-        start_date: input.startDate || new Date().toISOString().slice(0, 10),
-        due_date: input.dueDate || null,
-      })
-      .select('*')
-      .single();
-    fail(error);
-
     const template = Array.isArray(input.columns) && input.columns.length
       ? input.columns
       : [
@@ -485,19 +466,18 @@ export const api = {
           { name: 'Review', statusKey: 'review', color: '#BFE3F2', wipLimit: 3 },
           { name: 'Done', statusKey: 'done', color: '#8FE3B0' },
         ];
-    const statuses = await statusByKey(ws);
-    const { error: colErr } = await client.from('board_columns').insert(
-      template.map((c, i) => ({
-        project_id: data.id,
-        master_status_id: statuses[c.statusKey || 'backlog']?.id,
-        name: c.name,
-        color: c.color || '#6E7A85',
-        wip_limit: c.wipLimit ?? null,
-        position: i,
-      })),
-    );
-    fail(colErr);
-    await logActivity(ws, data.id, 'created', data.name);
+    const { data, error } = await client.rpc('create_project', {
+      p_name: input.name?.trim() || 'Novo projeto',
+      p_key: input.key || null,
+      p_description: input.description || '',
+      p_color: input.color || '#F5A524',
+      p_icon: input.icon || 'sparkle',
+      p_owner_id: input.ownerId || null,
+      p_due_date: input.dueDate || null,
+      p_start_date: input.startDate || null,
+      p_columns: template,
+    });
+    fail(error);
     return mapProject(data, { task_count: 0, done_count: 0, progress: 0, columnCount: template.length });
   },
 

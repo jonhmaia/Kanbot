@@ -400,9 +400,10 @@ export function FocusProvider({ children }) {
   }, [session, now, completePhase]);
 
   const setIslandPrefs = useCallback((patch) => {
+    const prev = readIslandPrefs();
     const next = persistIslandPrefs(patch);
     setPrefs(next);
-    if (patch.visible != null || patch.edge) applyIslandChrome(next);
+    if (next.visible !== prev.visible || next.edge !== prev.edge) applyIslandChrome(next);
     return next;
   }, []);
 

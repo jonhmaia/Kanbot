@@ -289,7 +289,7 @@ const TEMPLATES = {
 };
 
 export function ProjectSheet({ open, project, onClose, onSave }) {
-  const { members } = useApp();
+  const { members, currentUser } = useApp();
   const [form, setForm] = useState(null);
 
   useEffect(() => {
@@ -299,11 +299,11 @@ export function ProjectSheet({ open, project, onClose, onSave }) {
       key: project?.key ?? '',
       description: project?.description ?? '',
       color: project?.color ?? '#F5A524',
-      ownerId: project?.ownerId ?? members[0]?.id ?? '',
+      ownerId: project?.ownerId ?? currentUser?.id ?? members[0]?.id ?? '',
       dueDate: project?.dueDate ?? '',
       template: 'completo',
     });
-  }, [open, project, members]);
+  }, [open, project, members, currentUser]);
 
   if (!form) return null;
 
@@ -323,7 +323,7 @@ export function ProjectSheet({ open, project, onClose, onSave }) {
           <button
             type="button"
             disabled={!form.name.trim()}
-            onClick={() =>
+            onClick={() => {
               onSave({
                 name: form.name,
                 key: form.key || form.name.slice(0, 3),
@@ -332,8 +332,9 @@ export function ProjectSheet({ open, project, onClose, onSave }) {
                 ownerId: form.ownerId,
                 dueDate: form.dueDate || null,
                 columns: project ? undefined : TEMPLATES[form.template],
-              })
-            }
+              });
+              onClose?.();
+            }}
             className="btn-primary"
           >
             {project ? 'Salvar' : 'Criar projeto'}

@@ -5,6 +5,7 @@ use tauri::{Emitter, Manager, WindowEvent};
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
 static ISLAND_VISIBLE: AtomicBool = AtomicBool::new(true);
+static ISLAND_EXPANDED: AtomicBool = AtomicBool::new(false);
 static ISLAND_EDGE: Mutex<String> = Mutex::new(String::new());
 
 fn set_edge(edge: &str) {
@@ -33,42 +34,52 @@ fn normalize_edge(edge: &str) -> &'static str {
 
 fn island_size(edge: &str, expanded: bool) -> (f64, f64) {
     match (normalize_edge(edge), expanded) {
-        ("top", false) if cfg!(target_os = "macos") => (200.0, 34.0),
-        ("top", false) => (280.0, 52.0),
-        ("top", true) => (520.0, 340.0),
-        ("chatdock", false) => (64.0, 64.0),
-        ("chatdock", true) => (400.0, 420.0),
-        (_, false) => (52.0, 240.0),
-        (_, true) => (380.0, 360.0),
+        (_, true) => (312.0, 360.0),
+        ("chatdock", false) => (56.0, 56.0),
+        ("left", false) | ("right", false) => (44.0, 168.0),
+        ("top", false) if cfg!(target_os = "macos") => (236.0, 38.0),
+        _ => (264.0, 44.0),
     }
 }
 
-fn place_island(window: &tauri::WebviewWindow, edge: &str) {
-    let Ok(Some(monitor)) = window.primary_monitor() else {
+fn px(scale: f64, logical: f64) -> i32 {
+    (logical * scale).round() as i32
+}
+
+fn island_monitor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())
+}
+
+fn place_island(window: &tauri::WebviewWindow, edge: &str, width: f64, height: f64) {
+    let Some(monitor) = island_monitor(window) else {
         return;
     };
     let screen = monitor.size();
     let origin = monitor.position();
-    let Ok(size) = window.outer_size() else {
-        return;
-    };
-    let pad = (8.0 * monitor.scale_factor()).round() as i32;
+    let scale = monitor.scale_factor();
+    let w = px(scale, width);
+    let h = px(scale, height);
+    let pad = px(scale, 10.0);
     let top_pad = if cfg!(target_os = "macos") { 0 } else { pad };
     let (x, y) = match normalize_edge(edge) {
         "left" => (
             origin.x + pad,
-            origin.y + (screen.height as i32 - size.height as i32) / 2,
+            origin.y + (screen.height as i32 - h) / 2,
         ),
         "right" => (
-            origin.x + screen.width as i32 - size.width as i32 - pad,
-            origin.y + (screen.height as i32 - size.height as i32) / 2,
+            origin.x + screen.width as i32 - w - pad,
+            origin.y + (screen.height as i32 - h) / 2,
         ),
         "chatdock" => (
-            origin.x + screen.width as i32 - size.width as i32 - pad,
-            origin.y + screen.height as i32 - size.height as i32 - pad,
+            origin.x + screen.width as i32 - w - pad,
+            origin.y + screen.height as i32 - h - pad,
         ),
         _ => (
-            origin.x + (screen.width as i32 - size.width as i32) / 2,
+            origin.x + (screen.width as i32 - w) / 2,
             origin.y + top_pad,
         ),
     };
@@ -81,18 +92,22 @@ fn apply_island_layout(
     edge: &str,
 ) -> Result<String, String> {
     let dock = normalize_edge(edge).to_string();
+    let changed = current_edge() != dock;
     set_edge(&dock);
+    ISLAND_EXPANDED.store(expanded, Ordering::SeqCst);
     let (width, height) = island_size(&dock, expanded);
     island
         .set_size(tauri::LogicalSize::new(width, height))
         .map_err(|e| e.to_string())?;
-    place_island(island, &dock);
-    let _ = island.emit("island-edge", dock.clone());
+    place_island(island, &dock, width, height);
+    if changed {
+        let _ = island.emit("island-edge", dock.clone());
+    }
     Ok(dock)
 }
 
 fn infer_edge(window: &tauri::WebviewWindow) -> String {
-    let Ok(Some(monitor)) = window.primary_monitor() else {
+    let Some(monitor) = island_monitor(window) else {
         return current_edge();
     };
     let Ok(pos) = window.outer_position() else {
@@ -103,15 +118,21 @@ fn infer_edge(window: &tauri::WebviewWindow) -> String {
     };
     let screen = monitor.size();
     let origin = monitor.position();
+    let width = f64::from(screen.width).max(1.0);
+    let height = f64::from(screen.height).max(1.0);
     let cx = (pos.x - origin.x) as f64 + f64::from(size.width) / 2.0;
     let cy = (pos.y - origin.y) as f64 + f64::from(size.height) / 2.0;
-    let x_ratio = cx / f64::from(screen.width);
-    let y_ratio = cy / f64::from(screen.height);
-    if y_ratio > 0.68 && x_ratio > 0.55 {
-        "chatdock".into()
-    } else if x_ratio < 0.28 {
+    let x_ratio = cx / width;
+    let y_ratio = cy / height;
+    if x_ratio > 0.78 && y_ratio > 0.78 {
+        return "chatdock".into();
+    }
+    let left = cx;
+    let right = width - cx;
+    let top = cy;
+    if left < right && left < top && x_ratio < 0.22 {
         "left".into()
-    } else if x_ratio > 0.72 {
+    } else if right < left && right < top && x_ratio > 0.78 {
         "right".into()
     } else {
         "top".into()
@@ -153,7 +174,12 @@ fn hide_island(app: tauri::AppHandle) -> Result<(), String> {
         island.hide().map_err(|e| e.to_string())?;
     }
     ISLAND_VISIBLE.store(false, Ordering::SeqCst);
-    show_window(&app, "main")
+    if let Some(main) = app.get_webview_window("main") {
+        if !main.is_visible().unwrap_or(true) {
+            show_window(&app, "main")?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -161,7 +187,10 @@ fn show_island(app: tauri::AppHandle) -> Result<(), String> {
     let Some(island) = app.get_webview_window("island") else {
         return Ok(());
     };
-    apply_island_layout(&island, false, &current_edge())?;
+    let visible = island.is_visible().unwrap_or(false);
+    if !visible {
+        apply_island_layout(&island, false, &current_edge())?;
+    }
     island.show().map_err(|e| e.to_string())?;
     ISLAND_VISIBLE.store(true, Ordering::SeqCst);
     Ok(())
@@ -170,7 +199,8 @@ fn show_island(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn position_island(app: tauri::AppHandle) {
     if let Some(island) = app.get_webview_window("island") {
-        place_island(&island, &current_edge());
+        let (width, height) = island_size(&current_edge(), ISLAND_EXPANDED.load(Ordering::SeqCst));
+        place_island(&island, &current_edge(), width, height);
     }
 }
 
@@ -217,8 +247,9 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if let Some(island) = app.get_webview_window("island") {
-                set_edge("top");
-                place_island(&island, "top");
+                let edge = current_edge();
+                set_edge(&edge);
+                let _ = apply_island_layout(&island, false, &edge);
             }
             Ok(())
         })
@@ -252,7 +283,11 @@ pub fn run() {
                     }
                     WindowEvent::ScaleFactorChanged { .. } => {
                         if let Some(island) = window.app_handle().get_webview_window("island") {
-                            place_island(&island, &current_edge());
+                            let _ = apply_island_layout(
+                                &island,
+                                ISLAND_EXPANDED.load(Ordering::SeqCst),
+                                &current_edge(),
+                            );
                         }
                     }
                     _ => {}

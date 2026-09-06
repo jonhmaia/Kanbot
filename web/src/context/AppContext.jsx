@@ -56,7 +56,11 @@ export function AppProvider({ children }) {
   const applyBoot = useCallback((data) => {
     cacheSet('bootstrap', data);
     setBoot(data);
-    setWorkspaceId((current) => current || data.workspaces[0]?.id || null);
+    setWorkspaceId((current) => {
+      const ids = (data.workspaces || []).map((w) => w.id);
+      if (current && ids.includes(current)) return current;
+      return ids[0] || null;
+    });
     setProjects(data.projects);
     setError(null);
 

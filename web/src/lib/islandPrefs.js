@@ -28,10 +28,6 @@ export function isIslandDock(edge) {
   return edge === 'chatdock';
 }
 
-export function islandHoverExpands(edge) {
-  return edge === 'top';
-}
-
 const DEFAULT_PREFS = { accent: 'amber', edge: 'top', visible: true };
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 

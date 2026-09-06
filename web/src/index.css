@@ -255,6 +255,32 @@ html.island body {
   transition: none;
 }
 
+html.island .island-root {
+  height: 100%;
+  color: #f2f2f2;
+}
+
+html.island .island-shell {
+  background: #161618;
+  color: #f2f2f2;
+}
+
+html.island .island-live {
+  animation: island-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes island-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.86);
+  }
+}
+
 .island-action {
   @apply flex items-center justify-center gap-1.5 rounded-full px-2 py-2 text-[12px] text-dust transition hover:bg-white/[0.07] hover:text-chalk;
 }

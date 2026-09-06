@@ -53,9 +53,14 @@ export default function ProjectsPage() {
   );
 
   const save = async (payload) => {
-    if (sheet?.project) await updateProject(sheet.project.id, payload);
-    else await createProject(payload);
+    const editing = sheet?.project;
     setSheet(null);
+    try {
+      if (editing) await updateProject(editing.id, payload);
+      else await createProject(payload);
+    } catch {
+      /* toast ja vem do AppContext */
+    }
   };
 
   const openBoard = (project) => {
