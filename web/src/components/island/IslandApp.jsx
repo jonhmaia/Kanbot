@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useFocus } from '../../context/FocusContext';
 import { invokeDesktop, listenDesktop } from '../../lib/desktop';
 import { IconClock, IconClose, IconFlame, IconList, IconLogo, IconPause, IconPlay } from '../../lib/icons';
+import { ISLAND_EDGES, islandHoverExpands, isIslandDock, isIslandSide } from '../../lib/islandPrefs';
 
 export default function IslandApp() {
   const { session } = useApp();
@@ -30,7 +31,9 @@ export default function IslandApp() {
   const press = useRef(null);
   const leaveTimer = useRef(null);
   const loggedIn = Boolean(session);
-  const side = prefs.edge !== 'top';
+  const side = isIslandSide(prefs.edge);
+  const dock = isIslandDock(prefs.edge);
+  const hoverExpand = islandHoverExpands(prefs.edge);
   const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
 
   useEffect(() => {
@@ -63,15 +66,15 @@ export default function IslandApp() {
   };
 
   const onEnter = () => {
-    if (dragging.current || collapsedByUser.current) return;
+    if (!hoverExpand || dragging.current || collapsedByUser.current) return;
     clearTimeout(leaveTimer.current);
     if (loggedIn) applyExpanded(true);
   };
 
   const onLeave = () => {
-    collapsedByUser.current = false;
     if (dragging.current) return;
     clearTimeout(leaveTimer.current);
+    if (!hoverExpand) return;
     leaveTimer.current = setTimeout(() => applyExpanded(false), 280);
   };
 
@@ -108,66 +111,124 @@ export default function IslandApp() {
     press.current = null;
   };
 
+  const onPillClick = () => {
+    if (dragging.current || press.current?.dragged) return;
+    if (collapsedByUser.current && loggedIn) {
+      collapsedByUser.current = false;
+      applyExpanded(true);
+      return;
+    }
+    if (!expanded && loggedIn && !hoverExpand) {
+      applyExpanded(true);
+      return;
+    }
+    if (idle) invokeDesktop('show_main');
+    else if (running) pause();
+    else resume();
+  };
+
   const label = idle ? (loggedIn ? 'Kanbot' : session === undefined ? 'Kanbot' : 'Entrar') : activeTask?.title || 'Foco';
   const shell = {
     boxShadow: '0 0 0 1.5px ' + accent + ', 0 10px 28px rgba(0,0,0,0.38)',
   };
 
+  const pillClass = dock
+    ? 'grid h-[52px] w-[52px] place-items-center overflow-hidden rounded-full bg-[#111111]/94 text-chalk backdrop-blur-2xl'
+    : side
+      ? 'flex h-full w-[40px] flex-col items-center justify-center gap-2 rounded-full bg-[#111111]/94 px-1 py-3 text-chalk backdrop-blur-2xl'
+      : 'flex h-[40px] w-full items-center justify-center gap-2.5 rounded-full bg-[#111111]/94 px-3 text-chalk backdrop-blur-2xl';
+
   const pill = (
     <button
       type="button"
-      onClick={() => {
-        if (collapsedByUser.current && loggedIn) {
-          collapsedByUser.current = false;
-          applyExpanded(true);
-          return;
-        }
-        if (idle) invokeDesktop('show_main');
-        else if (running) pause();
-        else resume();
-      }}
+      onClick={onPillClick}
       onPointerDown={onPointerDown}
       onPointerUp={endPress}
       onPointerCancel={endPress}
-      className={
-        side
-          ? 'flex h-full w-[40px] flex-col items-center justify-center gap-2 rounded-full bg-[#111111]/94 px-1 py-3 text-chalk backdrop-blur-2xl'
-          : 'flex h-[40px] w-full items-center justify-center gap-2.5 rounded-full bg-[#111111]/94 px-3 text-chalk backdrop-blur-2xl'
-      }
+      className={pillClass}
       style={shell}
-      aria-label={idle ? 'Abrir Kanbot' : running ? 'Pausar foco' : 'Retomar foco'}
+      aria-label={
+        !expanded && loggedIn && !hoverExpand
+          ? 'Expandir notch'
+          : idle
+            ? 'Abrir Kanbot'
+            : running
+              ? 'Pausar foco'
+              : 'Retomar foco'
+      }
     >
-      {idle ? <IconLogo size={side ? 18 : 20} /> : <IconClock size={side ? 14 : 15} className="text-current" />}
-      <span
-        className={
-          'font-medium tabular-nums tracking-tight ' +
-          (side ? '[writing-mode:vertical-rl] rotate-180 text-[12px]' : 'text-[13px]')
-        }
-        style={{ color: idle ? undefined : accent }}
-      >
-        {idle ? '' : clock}
-      </span>
-      <span
-        className={
-          'truncate font-medium tracking-tight ' +
-          (side ? '[writing-mode:vertical-rl] rotate-180 text-[11px] max-h-[88px]' : 'max-w-[140px] text-[13px]')
-        }
-      >
-        {idle && !side ? label : side && idle ? label : label}
-      </span>
+      {dock ? (
+        idle ? (
+          <IconLogo size={52} />
+        ) : (
+          <span className="text-[11px] font-medium tabular-nums tracking-tight" style={{ color: accent }}>
+            {clock}
+          </span>
+        )
+      ) : (
+        <>
+          {idle ? <IconLogo size={side ? 18 : 20} /> : <IconClock size={side ? 14 : 15} className="text-current" />}
+          <span
+            className={
+              'font-medium tabular-nums tracking-tight ' +
+              (side ? '[writing-mode:vertical-rl] rotate-180 text-[12px]' : 'text-[13px]')
+            }
+            style={{ color: idle ? undefined : accent }}
+          >
+            {idle ? '' : clock}
+          </span>
+          <span
+            className={
+              'truncate font-medium tracking-tight ' +
+              (side ? '[writing-mode:vertical-rl] rotate-180 text-[11px] max-h-[88px]' : 'max-w-[140px] text-[13px]')
+            }
+          >
+            {label}
+          </span>
+        </>
+      )}
     </button>
   );
 
+  const shapePicker = (
+    <div className="flex flex-wrap gap-1">
+      {ISLAND_EDGES.map((item) => {
+        const selected = prefs.edge === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setIslandPrefs({ edge: item.id })}
+            aria-pressed={selected}
+            className={
+              'rounded-full px-2 py-0.5 text-[10px] transition ' +
+              (selected ? 'bg-white/[0.1] text-chalk' : 'text-smoke hover:text-chalk')
+            }
+          >
+            {item.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const stacked = side || dock;
   const panel = expanded && loggedIn && (
     <div
       className={
-        (side ? 'h-[344px] w-[316px] ' : 'mt-2 w-full ') +
+        (side ? 'h-[344px] w-[316px] ' : dock ? 'h-[344px] w-[368px] ' : 'mt-2 w-full ') +
         'overflow-hidden rounded-[26px] bg-[#111111]/95 backdrop-blur-2xl'
       }
       style={shell}
     >
-      <div className={'grid h-full ' + (side ? 'grid-rows-2' : 'grid-cols-2')}>
-        <section className="flex min-h-0 flex-col border-white/8 p-3.5" style={{ borderRight: side ? undefined : '1px solid rgba(255,255,255,0.08)', borderBottom: side ? '1px solid rgba(255,255,255,0.08)' : undefined }}>
+      <div className={'grid h-full ' + (stacked ? 'grid-rows-2' : 'grid-cols-2')}>
+        <section
+          className="flex min-h-0 flex-col border-white/8 p-3.5"
+          style={{
+            borderRight: stacked ? undefined : '1px solid rgba(255,255,255,0.08)',
+            borderBottom: stacked ? '1px solid rgba(255,255,255,0.08)' : undefined,
+          }}
+        >
           <div className="mb-2 flex items-center gap-1.5 text-smoke">
             <IconList size={13} />
             <p className="text-[11px] uppercase tracking-[0.14em]">To Do</p>
@@ -181,9 +242,7 @@ export default function IslandApp() {
               return (
                 <div
                   key={task.id}
-                  className={
-                    'flex items-start gap-2 rounded-2xl px-2 py-2 ' + (active ? 'bg-white/[0.06]' : '')
-                  }
+                  className={'flex items-start gap-2 rounded-2xl px-2 py-2 ' + (active ? 'bg-white/[0.06]' : '')}
                 >
                   <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full border border-white/25" />
                   <div className="min-w-0 flex-1">
@@ -232,6 +291,7 @@ export default function IslandApp() {
               />
             ))}
           </div>
+          <div className="mt-3">{shapePicker}</div>
           <div className="mt-auto flex items-center justify-between gap-2 pt-3">
             <p className="text-[11px] text-smoke">
               {idle
@@ -255,18 +315,15 @@ export default function IslandApp() {
                   Encerrar
                 </button>
               )}
-              <button
-                type="button"
-                onClick={hideIsland}
-                className="px-2 text-[11px] text-rose/80 hover:text-rose"
-              >
-                Sair
+              <button type="button" onClick={hideIsland} className="px-2 text-[11px] text-rose/80 hover:text-rose">
+                Esconder
               </button>
               <button
                 type="button"
                 onClick={collapse}
                 className="grid h-7 w-7 place-items-center rounded-full text-dust hover:bg-white/[0.06] hover:text-chalk"
                 aria-label="Recolher"
+                title="Recolher"
               >
                 <IconClose size={13} />
               </button>
@@ -282,11 +339,15 @@ export default function IslandApp() {
       ? 'flex h-full w-full flex-row items-start gap-2 p-1.5'
       : prefs.edge === 'right'
         ? 'flex h-full w-full flex-row-reverse items-start gap-2 p-1.5'
-        : 'flex h-full w-full flex-col items-center ' + (isMac ? 'pt-0' : 'pt-1.5');
+        : prefs.edge === 'chatdock'
+          ? 'flex h-full w-full flex-col-reverse items-end gap-2 p-1.5'
+          : 'flex h-full w-full flex-col items-center ' + (isMac ? 'pt-0' : 'pt-1.5');
+
+  const pillWrap = side ? 'h-full shrink-0' : dock ? 'shrink-0' : expanded ? 'w-[504px]' : 'w-full max-w-[268px]';
 
   return (
     <div className={'select-none ' + frame} onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      <div className={side ? 'h-full shrink-0' : expanded ? 'w-[504px]' : 'w-full max-w-[268px]'}>{pill}</div>
+      <div className={pillWrap}>{pill}</div>
       {panel}
     </div>
   );

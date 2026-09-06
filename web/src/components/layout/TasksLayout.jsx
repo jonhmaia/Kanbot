@@ -14,11 +14,7 @@ export default function TasksLayout() {
     setTaskTab(next.tab);
   }, [pathname, setTaskScope, setTaskTab]);
 
-  return (
-    <div className="pl-[6.75rem] sm:pl-[7.5rem]">
-      <Outlet />
-    </div>
-  );
+  return <Outlet />;
 }
 
 export function RedirectToTasks({ tab }) {

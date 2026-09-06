@@ -306,6 +306,12 @@ export const IconDevice = (p) => (
   </Svg>
 );
 
+export const IconNotch = (p) => (
+  <Svg {...p}>
+    <rect x="3.5" y="8" width="17" height="8" rx="4" />
+  </Svg>
+);
+
 export const IconPulse = (p) => (
   <Svg {...p}>
     <path d="M3 12h4l2-6 4 12 2.5-6H21" />

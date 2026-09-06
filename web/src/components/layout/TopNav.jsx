@@ -4,6 +4,7 @@ import { IconBell, IconGrid, IconLogo, IconLogout, IconSettings, IconSwatch, Ico
 import { ATMOSPHERES } from '../../lib/atmospheres';
 import { useApp } from '../../context/AppContext';
 import AtmospherePicker from '../settings/AtmospherePicker';
+import NotchToggle from './NotchToggle';
 import { Avatar, Dropdown } from '../ui/Primitives';
 import { MenuPortal, useMenu } from '../ui/MenuPortal';
 import { relativeTime } from '../../lib/format';
@@ -261,6 +262,7 @@ export default function TopNav() {
         </div>
 
         <div className="col-start-3 flex items-center justify-end gap-2.5">
+          <NotchToggle />
           <AtmosphereMenu />
           <NotificationBell />
           <AccountMenu />

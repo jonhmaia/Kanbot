@@ -1,11 +1,12 @@
 import { useFocus } from '../../context/FocusContext';
-import { invokeDesktop } from '../../lib/desktop';
+import { invokeDesktop, isDesktop } from '../../lib/desktop';
 import { ISLAND_ACCENTS, ISLAND_EDGES } from '../../lib/islandPrefs';
 import { Card, Switch } from '../ui/Primitives';
 import { IconCheck } from '../../lib/icons';
 
 export default function IslandPrefsCard() {
   const { prefs, setIslandPrefs } = useFocus();
+  if (!isDesktop()) return null;
 
   const setEdge = (edge) => {
     setIslandPrefs({ edge });
@@ -21,8 +22,9 @@ export default function IslandPrefsCard() {
     <Card className="grain p-5 sm:p-6">
       <h3 className="card-title">Notch</h3>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-smoke">
-        A pilula flutuante no app nativo. Sair esconde sem fechar o Kanbot; o X so recolhe o painel.
-        Arraste para a lateral para encaixar. Com um projeto aberto, a borda segue a cor dele.
+        A pilula flutuante no app nativo. Esconder tira a notch sem fechar o Kanbot; Recolher so deixa a
+        pilula. Arraste para a lateral ou para o canto para encaixar. Com um projeto aberto, a borda segue
+        a cor dele.
       </p>
 
       <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-lineSoft bg-white/[0.03] px-3.5 py-2.5">

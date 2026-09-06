@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import AssistantPanel from './AssistantPanel';
 import { useChat } from '../../context/ChatContext';
+import { useFocus } from '../../context/FocusContext';
+import { isDesktop } from '../../lib/desktop';
 import { IconClose, IconLogo, IconPlus } from '../../lib/icons';
 
 /**
@@ -9,7 +11,10 @@ import { IconClose, IconLogo, IconPlus } from '../../lib/icons';
  */
 export default function ChatDock() {
   const { open, setOpen, toggle, thinking, focusNonce, contextLabel, messages, reset } = useChat();
+  const { prefs } = useFocus();
   const panelRef = useRef(null);
+  const bumpForNotch = isDesktop() && prefs.visible !== false && prefs.edge === 'chatdock';
+  const cornerClass = bumpForNotch ? 'right-[6.5rem] sm:right-[6.5rem]' : 'right-4 sm:right-5';
 
   useEffect(() => {
     if (!open) return;
@@ -31,7 +36,10 @@ export default function ChatDock() {
       <button
         type="button"
         onClick={toggle}
-        className="fixed bottom-5 right-5 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full shadow-lift transition hover:scale-[1.04] hover:brightness-110"
+        className={
+          'fixed bottom-5 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full shadow-lift transition hover:scale-[1.04] hover:brightness-110 ' +
+          (bumpForNotch ? 'right-[6.5rem]' : 'right-5')
+        }
         style={{ boxShadow: '0 16px 32px -14px color-mix(in srgb, var(--accent) 55%, transparent)' }}
         aria-label="Abrir assistente"
         title={'Assistente · ' + contextLabel}
@@ -47,7 +55,10 @@ export default function ChatDock() {
       ref={panelRef}
       role="dialog"
       aria-label="Assistente Kanbot"
-      className="card grain fixed bottom-4 right-4 z-50 flex h-[min(680px,calc(100vh-5.5rem))] w-[min(440px,calc(100vw-2rem))] flex-col overflow-hidden p-4 shadow-lift sm:bottom-5 sm:right-5 sm:p-5"
+      className={
+        'card grain fixed bottom-4 z-50 flex h-[min(680px,calc(100vh-5.5rem))] w-[min(440px,calc(100vw-2rem))] flex-col overflow-hidden p-4 shadow-lift sm:bottom-5 sm:p-5 ' +
+        cornerClass
+      }
     >
       <header className="mb-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">

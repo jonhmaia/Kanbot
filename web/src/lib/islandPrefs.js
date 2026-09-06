@@ -17,7 +17,20 @@ export const ISLAND_EDGES = [
   { id: 'top', name: 'Topo' },
   { id: 'left', name: 'Esquerda' },
   { id: 'right', name: 'Direita' },
+  { id: 'chatdock', name: 'ChatDock' },
 ];
+
+export function isIslandSide(edge) {
+  return edge === 'left' || edge === 'right';
+}
+
+export function isIslandDock(edge) {
+  return edge === 'chatdock';
+}
+
+export function islandHoverExpands(edge) {
+  return edge === 'top';
+}
 
 const DEFAULT_PREFS = { accent: 'amber', edge: 'top', visible: true };
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;

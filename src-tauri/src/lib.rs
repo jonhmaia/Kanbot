@@ -26,6 +26,7 @@ fn normalize_edge(edge: &str) -> &'static str {
     match edge {
         "left" => "left",
         "right" => "right",
+        "chatdock" => "chatdock",
         _ => "top",
     }
 }
@@ -35,6 +36,8 @@ fn island_size(edge: &str, expanded: bool) -> (f64, f64) {
         ("top", false) if cfg!(target_os = "macos") => (200.0, 34.0),
         ("top", false) => (280.0, 52.0),
         ("top", true) => (520.0, 340.0),
+        ("chatdock", false) => (64.0, 64.0),
+        ("chatdock", true) => (400.0, 420.0),
         (_, false) => (52.0, 240.0),
         (_, true) => (380.0, 360.0),
     }
@@ -59,6 +62,10 @@ fn place_island(window: &tauri::WebviewWindow, edge: &str) {
         "right" => (
             origin.x + screen.width as i32 - size.width as i32 - pad,
             origin.y + (screen.height as i32 - size.height as i32) / 2,
+        ),
+        "chatdock" => (
+            origin.x + screen.width as i32 - size.width as i32 - pad,
+            origin.y + screen.height as i32 - size.height as i32 - pad,
         ),
         _ => (
             origin.x + (screen.width as i32 - size.width as i32) / 2,
@@ -97,10 +104,14 @@ fn infer_edge(window: &tauri::WebviewWindow) -> String {
     let screen = monitor.size();
     let origin = monitor.position();
     let cx = (pos.x - origin.x) as f64 + f64::from(size.width) / 2.0;
-    let ratio = cx / f64::from(screen.width);
-    if ratio < 0.28 {
+    let cy = (pos.y - origin.y) as f64 + f64::from(size.height) / 2.0;
+    let x_ratio = cx / f64::from(screen.width);
+    let y_ratio = cy / f64::from(screen.height);
+    if y_ratio > 0.68 && x_ratio > 0.55 {
+        "chatdock".into()
+    } else if x_ratio < 0.28 {
         "left".into()
-    } else if ratio > 0.72 {
+    } else if x_ratio > 0.72 {
         "right".into()
     } else {
         "top".into()
