@@ -89,10 +89,40 @@ export function mapProject(row, progress = {}, memberIds = []) {
   };
 }
 
+export function mapBoard(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    kind: row.kind === 'dynamic' ? 'dynamic' : 'normal',
+    frequencyDays: row.frequency_days == null ? null : Number(row.frequency_days),
+    position: Number(row.position ?? 0),
+    isDefault: Boolean(row.is_default),
+    createdAt: row.created_at,
+  };
+}
+
+export function mapSprint(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    boardId: row.board_id,
+    projectId: row.project_id,
+    name: row.name,
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+    status: row.status,
+    closedAt: row.closed_at || null,
+    createdAt: row.created_at,
+  };
+}
+
 export function mapColumn(row) {
   return {
     id: row.id,
     projectId: row.project_id,
+    boardId: row.board_id || null,
     name: row.name,
     statusKey: row.status_key || row.key,
     color: row.color,
@@ -127,6 +157,11 @@ export function mapTask(row, membersById = {}, checklist = []) {
   return {
     id: row.id,
     projectId: row.project_id,
+    boardId: row.board_id || null,
+    boardName: row.board_name || '',
+    boardKind: row.board_kind || 'normal',
+    sprintId: row.sprint_id || null,
+    sprintName: row.sprint_name || '',
     columnId: row.column_id,
     title: row.title,
     description: row.description || '',

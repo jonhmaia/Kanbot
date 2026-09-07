@@ -37,6 +37,19 @@ const statItem = {
   },
 };
 
+const ACTION_OPS = [
+  'create_project',
+  'create_task',
+  'update_task',
+  'delete_task',
+  'move_task',
+  'create_board',
+  'update_board',
+  'delete_board',
+  'create_sprint',
+  'close_sprint',
+];
+
 const actionItem = {
   type: 'object',
   additionalProperties: false,
@@ -50,6 +63,8 @@ const actionItem = {
     'color',
     'icon',
     'projectId',
+    'boardId',
+    'sprintId',
     'columnId',
     'statusKey',
     'priority',
@@ -58,17 +73,23 @@ const actionItem = {
     'estimateHours',
     'progress',
     'labels',
+    'kind',
+    'frequencyDays',
+    'startsOn',
+    'endsOn',
   ],
   properties: {
-    op: { type: 'string', enum: ['create_project', 'create_task', 'update_task'] },
-    id: { type: 'string', description: 'ID ou titulo da tarefa ao editar. Vazio em create.' },
-    name: { type: 'string', description: 'Nome do projeto' },
+    op: { type: 'string', enum: ACTION_OPS },
+    id: { type: 'string', description: 'ID da tarefa/board/sprint ao editar. Vazio em create.' },
+    name: { type: 'string', description: 'Nome do projeto, board ou sprint' },
     key: { type: 'string', description: 'Sigla do projeto, 3 letras' },
     title: { type: 'string', description: 'Titulo da tarefa' },
     description: { type: 'string' },
     color: { type: 'string' },
     icon: { type: 'string', description: 'sparkle|pulse|device|shield|layers|target' },
     projectId: { type: 'string', description: 'ID, key ou nome do projeto' },
+    boardId: { type: 'string', description: 'ID ou nome do board' },
+    sprintId: { type: 'string', description: 'ID ou nome do sprint' },
     columnId: { type: 'string' },
     statusKey: { type: 'string', description: 'backlog|in_progress|review|blocked|done' },
     priority: { type: 'string', description: 'urgent|high|medium|low' },
@@ -77,6 +98,10 @@ const actionItem = {
     estimateHours: { type: 'string' },
     progress: { type: 'string' },
     labels: { type: 'string', description: 'labels separados por virgula' },
+    kind: { type: 'string', description: 'normal|dynamic' },
+    frequencyDays: { type: 'string', description: 'Frequencia do board dinamico em dias, ex 7' },
+    startsOn: { type: 'string', description: 'Inicio do sprint YYYY-MM-DD' },
+    endsOn: { type: 'string', description: 'Fim do sprint YYYY-MM-DD' },
   },
 };
 
@@ -95,7 +120,8 @@ export const REPLY_JSON_SCHEMA = {
     actions: {
       type: 'array',
       items: actionItem,
-      description: 'Mutacoes reais. Vazio se for so consulta.',
+      maxItems: 12,
+      description: 'Mutacoes reais. Vazio se for so consulta. Ate 12 por turno.',
     },
     blocks: {
       type: 'array',
@@ -125,7 +151,8 @@ export const REPLY_JSON_SCHEMA = {
 
 export function buildSystemPrompt() {
   return [
-    'Voce e o Kanbot, copiloto de um kanban multi-projeto (board master + boards por projeto).',
+    'Voce e o Kanbot, copiloto de um kanban multi-produto: cada produto (projeto) tem varios boards.',
+    'Board normal = tarefas continuas. Board dinamico = sprints que viram na frequencia (ex. 7 dias).',
     'Responda SEMPRE com JSON no schema kanbot_reply. Nunca invente IDs: use so os do catalogo.',
     'Escreva em portugues, tom direto, sem markdown de codigo.',
     '',
@@ -148,17 +175,25 @@ export function buildSystemPrompt() {
     '- suggestions: perguntas naturais que o usuario pode clicar.',
     '- Campos nao usados: string vazia, array vazio, chartType "none".',
     '',
-    'MUTACOES (actions): o sistema executa de verdade. So preencha actions se o usuario pediu criar/editar.',
+    'MUTACOES (actions): o sistema executa de verdade. So preencha actions se o usuario pediu criar/editar/excluir/mover.',
     '- create_project: name obrigatorio. key com 3 letras. description/color/icon opcionais.',
-    '- create_task: title obrigatorio + projectId (id, key tipo SFR, ou nome). columnId ou statusKey (backlog, in_progress, review, blocked, done).',
-    '- update_task: id = UUID ou titulo existente. So preencha campos que mudam.',
-    '- Em um mesmo turno, crie o projeto primeiro; nas tasks seguintes projectId pode ser a key nova.',
+    '- create_task: title obrigatorio + projectId. boardId (id ou nome) ou o board da tela. columnId ou statusKey.',
+    '- update_task: id = UUID ou titulo. So preencha campos que mudam.',
+    '- move_task: id + columnId ou statusKey. Pode mudar de board com boardId.',
+    '- delete_task: id da tarefa.',
+    '- create_board: projectId + name + kind normal|dynamic. Se dynamic, frequencyDays (7, 14, 30).',
+    '- update_board: id do board. name/kind/frequencyDays.',
+    '- delete_board: id. Nao apague o ultimo board do produto.',
+    '- create_sprint: boardId de um board dinamico (se o produto so tem board normal e o usuario pediu sprint, crie um board dinamico primeiro).',
+    '- close_sprint: id do sprint ativo. Incompletas vao para o proximo sprint na mesma coluna.',
+    '- Em um mesmo turno, crie o projeto/board primeiro; nas tasks seguintes use a key/nome novo.',
     '- Nao invente UUID. Consultas (resumo, quem, prazos) devem ter actions: [].',
     '',
     'CONTEXTO DE TELA: quando vier um bloco CONTEXTO ATUAL DA TELA, ele manda na desambiguacao.',
     'Se o usuario anexar um print do monitor, use a imagem com o catalogo. Nao invente texto ilegivel.',
-    '- "esta tarefa", "essa tarefa", "isso" = openTask do contexto. Use o id dela em update_task.',
-    '- "este projeto", "aqui", "nesta tela" = projectId do contexto; use-o ao criar tarefa sem projeto citado.',
+    '- "esta tarefa", "essa tarefa", "isso" = openTask do contexto. Use o id dela em update_task/move_task/delete_task.',
+    '- "este projeto", "aqui", "nesta tela" = projectId do contexto.',
+    '- "neste board" = boardId do contexto. Sem board citado, use o board da tela ou o default do produto.',
     '- Comece pelo que esta na tela antes de trazer o resto do workspace.',
   ].join('\n');
 }

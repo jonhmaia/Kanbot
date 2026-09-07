@@ -1,14 +1,15 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
 import BoardCanvas from '../components/board/BoardCanvas';
-import { ColumnSheet, TaskSheet } from '../components/board/BoardSheets';
+import { BoardSheet, ColumnSheet, TaskSheet } from '../components/board/BoardSheets';
 import InviteSheet from '../components/project/InviteSheet';
 import { AvatarStack, Dropdown, EmptyState } from '../components/ui/Primitives';
-import { IconChevronRight, IconPlus, IconUsers, projectIcons } from '../lib/icons';
+import { IconChevronRight, IconPencil, IconPlus, IconUsers, projectIcons } from '../lib/icons';
 import { api } from '../lib/api';
 import CachedGate from '../components/ui/CachedGate';
 import { useCached } from '../lib/useCached';
+import { formatDate } from '../lib/format';
 import {
   addColumnToBoard,
   addTaskToBoard,
@@ -34,15 +35,37 @@ const PRIORITY_FILTERS = [
 
 export default function ProjectBoardPage() {
   const { projectId } = useParams();
+  const [params, setParams] = useSearchParams();
+  const boardId = params.get('board') || '';
+  const sprintId = params.get('sprint') || '';
   const { members, notify, loadProjects } = useApp();
-  const fetchBoard = useCallback(() => api.projectBoard(projectId), [projectId]);
-  const [board, setBoard, reload, error] = useCached('board:' + projectId, fetchBoard);
+  const fetchBoard = useCallback(
+    () => api.projectBoard(projectId, { boardId: boardId || undefined, sprintId: sprintId || undefined }),
+    [projectId, boardId, sprintId],
+  );
+  const cacheKey = 'board:' + projectId + ':' + (boardId || 'default') + ':' + (sprintId || 'active');
+  const [board, setBoard, reload, error] = useCached(cacheKey, fetchBoard);
   const [search, setSearch] = useState('');
   const [priority, setPriority] = useState('');
   const [assignee, setAssignee] = useState('');
   const [taskSheet, setTaskSheet] = useState(null);
   const [columnSheet, setColumnSheet] = useState(null);
+  const [boardSheet, setBoardSheet] = useState(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+
+  const currentBoard = board?.board;
+  const sprint = board?.sprint;
+  const historyView = Boolean(sprint && sprint.status === 'closed');
+  const boards = board?.boards || [];
+
+  const setQuery = (nextBoard, nextSprint) => {
+    const next = new URLSearchParams(params);
+    if (nextBoard) next.set('board', nextBoard);
+    else next.delete('board');
+    if (nextSprint) next.set('sprint', nextSprint);
+    else next.delete('sprint');
+    setParams(next, { replace: true });
+  };
 
   const filtered = useMemo(() => {
     if (!board) return [];
@@ -58,7 +81,6 @@ export default function ProjectBoardPage() {
     }));
   }, [board, search, priority, assignee]);
 
-  /* o assistente enxerga este board e a tarefa aberta */
   useAssistantContext(
     'board',
     useMemo(() => {
@@ -67,6 +89,11 @@ export default function ProjectBoardPage() {
         projectId: board.project.id,
         projectName: board.project.name,
         projectKey: board.project.key,
+        boardId: currentBoard?.id || null,
+        boardName: currentBoard?.name || null,
+        boardKind: currentBoard?.kind || null,
+        sprintId: sprint?.id || null,
+        sprintName: sprint?.name || null,
         isMaster: false,
         view: {
           columns: board.columns.map((c) => c.name + ' (' + c.tasks.length + ')'),
@@ -74,11 +101,12 @@ export default function ProjectBoardPage() {
           search: search || undefined,
           priorityFilter: priority || undefined,
           assigneeFilter: (board.members || members).find((m) => m.id === assignee)?.name,
+          sprint: sprint ? sprint.name + ' ' + sprint.startsOn + '–' + sprint.endsOn : undefined,
         },
         openTask: taskSheet?.task || null,
         openTaskDraft: Boolean(taskSheet && !taskSheet.task),
       };
-    }, [board, members, search, priority, assignee, taskSheet]),
+    }, [board, currentBoard, sprint, members, search, priority, assignee, taskSheet]),
   );
 
   const move = async (task, target) => {
@@ -108,7 +136,8 @@ export default function ProjectBoardPage() {
       return;
     }
     const col = board.columns.find((c) => c.id === payload.columnId) || board.columns[0];
-    const draft = draftTask(payload, {
+    const body = { ...payload, sprintId: sprint?.id || null };
+    const draft = draftTask(body, {
       projectId: board.project.id,
       columnId: col?.id,
       statusKey: col?.statusKey,
@@ -121,7 +150,7 @@ export default function ProjectBoardPage() {
     setBoard((b) => addTaskToBoard(b, draft, draft.columnId));
     notify('Tarefa criada', 'success');
     try {
-      const created = await api.createTask(payload);
+      const created = await api.createTask(body);
       setBoard((b) => replaceTaskOnBoard(b, draft.id, created));
       loadProjects();
     } catch (e) {
@@ -159,6 +188,7 @@ export default function ProjectBoardPage() {
     const draft = {
       id: tempId(),
       projectId,
+      boardId: currentBoard?.id,
       name: payload.name?.trim() || 'Nova coluna',
       statusKey: payload.statusKey || 'backlog',
       color: payload.color || '#6E7A85',
@@ -168,7 +198,7 @@ export default function ProjectBoardPage() {
     };
     setBoard((b) => addColumnToBoard(b, draft));
     try {
-      const created = await api.createColumn(projectId, payload);
+      const created = await api.createColumn(projectId, { ...payload, boardId: currentBoard?.id });
       setBoard((b) => ({
         ...b,
         columns: b.columns.map((c) => (c.id === draft.id ? { ...created, tasks: [] } : c)),
@@ -194,6 +224,49 @@ export default function ProjectBoardPage() {
     }
   };
 
+  const saveBoardMeta = async (payload) => {
+    const editing = boardSheet;
+    setBoardSheet(null);
+    try {
+      if (editing?.id) {
+        await api.updateBoard(editing.id, payload);
+        notify('Board atualizado', 'success');
+        reload();
+      } else {
+        const created = await api.createBoard(projectId, payload);
+        notify('Board criado', 'success');
+        setQuery(created.id);
+      }
+      loadProjects();
+    } catch (e) {
+      notify(e.message, 'warn');
+    }
+  };
+
+  const removeBoard = async (item) => {
+    setBoardSheet(null);
+    try {
+      await api.deleteBoard(item.id);
+      notify('Board excluido', 'warn');
+      setQuery('');
+      loadProjects();
+    } catch (e) {
+      notify(e.message, 'warn');
+    }
+  };
+
+  const closeAndRoll = async () => {
+    if (!sprint) return;
+    try {
+      await api.closeSprint(sprint.id);
+      notify('Sprint fechado. Incompletas foram para o proximo.', 'success');
+      setQuery(currentBoard?.id);
+      loadProjects();
+    } catch (e) {
+      notify(e.message, 'warn');
+    }
+  };
+
   if (!board) return <CachedGate error={error} onRetry={reload} />;
 
   const { project } = board;
@@ -201,6 +274,10 @@ export default function ProjectBoardPage() {
   const Icon = projectIcons[project.icon] || projectIcons.layers;
   const team = roster;
   const total = board.columns.reduce((n, c) => n + c.tasks.length, 0);
+  const sprintOptions = (board.sprints || []).map((s) => ({
+    value: s.id,
+    label: s.name + (s.status === 'active' ? ' (atual)' : ''),
+  }));
 
   return (
     <>
@@ -213,6 +290,12 @@ export default function ProjectBoardPage() {
             </Link>
             <IconChevronRight size={11} />
             <span className="text-dust">{project.key}</span>
+            {currentBoard?.name && (
+              <>
+                <IconChevronRight size={11} />
+                <span className="text-dust">{currentBoard.name}</span>
+              </>
+            )}
           </span>
         }
         searchValue={search}
@@ -233,12 +316,78 @@ export default function ProjectBoardPage() {
             <button type="button" onClick={() => setInviteOpen(true)} className="btn-ghost">
               <IconUsers size={14} /> Convidar
             </button>
-            <button type="button" onClick={() => setTaskSheet({ columnId: board.columns[0]?.id })} className="btn-primary">
+            <button
+              type="button"
+              disabled={historyView}
+              onClick={() => setTaskSheet({ columnId: board.columns[0]?.id })}
+              className="btn-primary"
+            >
               <IconPlus size={14} /> Nova tarefa
             </button>
           </div>
         }
       />
+
+      <div className="mb-3 flex flex-wrap items-center gap-2 px-5 sm:px-7">
+        {boards.map((item) => {
+          const active = item.id === currentBoard?.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setQuery(item.id)}
+              className={
+                'rounded-full border px-3 py-1.5 text-[12px] transition ' +
+                (active ? 'border-amber/50 bg-amber/10 text-chalk' : 'border-line bg-white/[0.04] text-smoke hover:text-chalk')
+              }
+            >
+              {item.name}
+              {item.kind === 'dynamic' ? ' · ' + (item.frequencyDays || 7) + 'd' : ''}
+            </button>
+          );
+        })}
+        <button type="button" onClick={() => setBoardSheet({})} className="rounded-full border border-dashed border-line px-3 py-1.5 text-[12px] text-smoke hover:text-chalk">
+          <span className="inline-flex items-center gap-1">
+            <IconPlus size={12} /> Board
+          </span>
+        </button>
+        {currentBoard && (
+          <button
+            type="button"
+            onClick={() => setBoardSheet(currentBoard)}
+            className="grid h-8 w-8 place-items-center rounded-full text-smoke hover:bg-white/[0.06] hover:text-chalk"
+            aria-label="Editar board"
+          >
+            <IconPencil size={13} />
+          </button>
+        )}
+      </div>
+
+      {currentBoard?.kind === 'dynamic' && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 px-5 sm:px-7">
+          <div className="rounded-2xl border border-line bg-white/[0.03] px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.12em] text-smoke">{historyView ? 'Historico' : 'Sprint atual'}</p>
+            <p className="text-[13px] text-chalk">
+              {sprint ? sprint.name + ' · ' + formatDate(sprint.startsOn) + ' – ' + formatDate(sprint.endsOn) : 'Sem sprint'}
+            </p>
+          </div>
+          {sprintOptions.length > 0 && (
+            <Dropdown
+              value={sprint?.id || ''}
+              options={sprintOptions}
+              onChange={(id) => {
+                const picked = (board.sprints || []).find((s) => s.id === id);
+                setQuery(currentBoard.id, picked?.status === 'active' ? '' : id);
+              }}
+            />
+          )}
+          {!historyView && sprint && (
+            <button type="button" onClick={closeAndRoll} className="btn-ghost">
+              Fechar e abrir proximo
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-4 px-5 sm:px-7">
         <span
@@ -258,7 +407,7 @@ export default function ProjectBoardPage() {
         {board.columns.length === 0 ? (
           <EmptyState
             title="Board vazio"
-            description="Crie a primeira coluna para comecar a organizar este projeto."
+            description="Crie a primeira coluna para comecar a organizar este board."
             action={
               <button type="button" onClick={() => setColumnSheet({})} className="btn-primary">
                 <IconPlus size={14} /> Nova coluna
@@ -271,7 +420,7 @@ export default function ProjectBoardPage() {
             mode="project"
             onMove={move}
             onOpenTask={(task) => setTaskSheet({ task })}
-            onAddTask={(column) => setTaskSheet({ columnId: column.id })}
+            onAddTask={(column) => !historyView && setTaskSheet({ columnId: column.id })}
             onEditColumn={(column) => setColumnSheet({ column })}
             onAddColumn={() => setColumnSheet({})}
             emptyHint="Arraste um card para ca."
@@ -299,6 +448,15 @@ export default function ProjectBoardPage() {
         onClose={() => setColumnSheet(null)}
         onSave={saveColumn}
         onDelete={removeColumn}
+      />
+
+      <BoardSheet
+        open={!!boardSheet}
+        board={boardSheet?.id ? boardSheet : null}
+        canDelete={boards.length > 1}
+        onClose={() => setBoardSheet(null)}
+        onSave={saveBoardMeta}
+        onDelete={removeBoard}
       />
     </>
   );

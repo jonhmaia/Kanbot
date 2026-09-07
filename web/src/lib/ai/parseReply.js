@@ -350,6 +350,28 @@ const ACTION_OPS = {
   updatetask: 'update_task',
   edit_task: 'update_task',
   editar_tarefa: 'update_task',
+  delete_task: 'delete_task',
+  deletetask: 'delete_task',
+  excluir_tarefa: 'delete_task',
+  remove_task: 'delete_task',
+  move_task: 'move_task',
+  movetask: 'move_task',
+  mover_tarefa: 'move_task',
+  create_board: 'create_board',
+  createboard: 'create_board',
+  criar_board: 'create_board',
+  update_board: 'update_board',
+  updateboard: 'update_board',
+  editar_board: 'update_board',
+  delete_board: 'delete_board',
+  deleteboard: 'delete_board',
+  excluir_board: 'delete_board',
+  create_sprint: 'create_sprint',
+  createsprint: 'create_sprint',
+  criar_sprint: 'create_sprint',
+  close_sprint: 'close_sprint',
+  closesprint: 'close_sprint',
+  fechar_sprint: 'close_sprint',
 };
 
 export function parseActions(parsed) {
@@ -369,6 +391,8 @@ export function parseActions(parsed) {
         color: asString(raw.color),
         icon: asString(raw.icon),
         projectId: asString(raw.projectId || raw.project),
+        boardId: asString(raw.boardId || raw.board),
+        sprintId: asString(raw.sprintId || raw.sprint),
         columnId: asString(raw.columnId || raw.column),
         statusKey: asString(raw.statusKey || raw.status),
         priority: asString(raw.priority),
@@ -377,10 +401,14 @@ export function parseActions(parsed) {
         estimateHours: asString(raw.estimateHours ?? raw.hours),
         progress: asString(raw.progress),
         labels: asString(Array.isArray(raw.labels) ? raw.labels.join(', ') : raw.labels),
+        kind: asString(raw.kind || raw.boardKind),
+        frequencyDays: asString(raw.frequencyDays ?? raw.frequency),
+        startsOn: asString(raw.startsOn || raw.start),
+        endsOn: asString(raw.endsOn || raw.end),
       };
     })
     .filter(Boolean)
-    .slice(0, 8);
+    .slice(0, 12);
 }
 
 export function heuristicReply(prompt, { catalog, live } = {}) {

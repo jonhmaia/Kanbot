@@ -160,6 +160,31 @@ function mapProject(row: Record<string, unknown>, extra: Record<string, unknown>
   };
 }
 
+function mapBoard(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    kind: row.kind === 'dynamic' ? 'dynamic' : 'normal',
+    frequencyDays: row.frequency_days == null ? null : Number(row.frequency_days),
+    position: Number(row.position ?? 0),
+    isDefault: Boolean(row.is_default),
+  };
+}
+
+function mapSprint(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    boardId: row.board_id,
+    projectId: row.project_id,
+    name: row.name,
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+    status: row.status,
+    closedAt: row.closed_at || null,
+  };
+}
+
 function mapTask(row: Record<string, unknown>) {
   return {
     id: row.id,
@@ -168,6 +193,11 @@ function mapTask(row: Record<string, unknown>) {
     statusKey: row.status_key || 'backlog',
     columnId: row.column_id,
     columnName: row.column_name || '',
+    boardId: row.board_id || null,
+    boardName: row.board_name || '',
+    boardKind: row.board_kind || 'normal',
+    sprintId: row.sprint_id || null,
+    sprintName: row.sprint_name || '',
     priority: row.priority,
     projectId: row.project_id,
     projectName: row.project_name || '',
@@ -214,12 +244,21 @@ async function loadMembers(ctx: AuthCtx) {
 async function fetchTasks(ctx: AuthCtx, filter: Record<string, unknown> = {}) {
   let query = ctx.supabase.from('v_tasks_expanded').select('*').eq('workspace_id', ctx.workspaceId);
   if (filter.projectId) query = query.eq('project_id', filter.projectId);
+  if (filter.boardId) query = query.eq('board_id', filter.boardId);
+  if (filter.sprintId) query = query.eq('sprint_id', filter.sprintId);
   if (filter.assigneeId) query = query.eq('assignee_id', filter.assigneeId);
   if (filter.priority) query = query.eq('priority', filter.priority);
   if (filter.statusKey) query = query.eq('status_key', filter.statusKey);
   if (filter.q) {
     const q = String(filter.q);
     query = query.or('title.ilike.%' + q + '%,description.ilike.%' + q + '%');
+  }
+  if (filter.sprintId) {
+    /* historico de um sprint */
+  } else if (filter.includeHistory) {
+    /* tudo */
+  } else if (filter.currentOnly !== false) {
+    query = query.eq('is_current', true);
   }
   const { data, error } = await query.order('position');
   fail(error);
@@ -260,13 +299,15 @@ async function statusByKey(ctx: AuthCtx) {
   return Object.fromEntries((data || []).map((s) => [s.key, s]));
 }
 
-async function loadColumns(ctx: AuthCtx, projectIds: string[]) {
+async function loadColumns(ctx: AuthCtx, projectIds: string[], boardId?: string | null) {
   if (!projectIds.length) return [];
-  const { data, error } = await ctx.supabase
+  let query = ctx.supabase
     .from('board_columns')
-    .select('id, name, color, wip_limit, position, project_id, master_statuses (key)')
+    .select('id, name, color, wip_limit, position, project_id, board_id, master_statuses (key)')
     .in('project_id', projectIds)
     .order('position');
+  if (boardId) query = query.eq('board_id', boardId);
+  const { data, error } = await query;
   fail(error);
   return (data || []).map((c) => {
     const status = c.master_statuses as { key?: string } | null;
@@ -275,11 +316,44 @@ async function loadColumns(ctx: AuthCtx, projectIds: string[]) {
       name: c.name,
       statusKey: status?.key || 'backlog',
       projectId: c.project_id,
+      boardId: c.board_id,
       wipLimit: c.wip_limit,
       position: c.position,
       color: c.color,
     };
   });
+}
+
+async function ensurePeriods(ctx: AuthCtx) {
+  const { error } = await ctx.supabase.rpc('ensure_dynamic_periods');
+  fail(error);
+}
+
+async function loadBoards(ctx: AuthCtx, projectId?: string | null) {
+  const projects = await listProjectRows(ctx);
+  const ids = projectId ? [projectId] : projects.map((p) => p.id as string);
+  if (!ids.length) return [];
+  const { data, error } = await ctx.supabase.from('boards').select('*').in('project_id', ids).order('position');
+  fail(error);
+  return (data || []).map((row) => mapBoard(row as Record<string, unknown>));
+}
+
+async function loadSprints(ctx: AuthCtx, boardIds: string[]) {
+  if (!boardIds.length) return [];
+  const { data, error } = await ctx.supabase
+    .from('sprints')
+    .select('*')
+    .in('board_id', boardIds)
+    .order('starts_on', { ascending: false });
+  fail(error);
+  return (data || []).map((row) => mapSprint(row as Record<string, unknown>));
+}
+
+async function resolveBoard(ctx: AuthCtx, projectId: string, query: unknown) {
+  const boards = await loadBoards(ctx, projectId);
+  const hit = pick(boards as unknown as Record<string, unknown>[], query, ['name']);
+  if (hit) return hit as ReturnType<typeof mapBoard>;
+  return boards.find((b) => b.isDefault) || boards[0] || null;
 }
 
 async function resolveProject(ctx: AuthCtx, query: unknown) {
@@ -302,16 +376,20 @@ function resolveStatusKey(value: unknown) {
 }
 
 async function resolveColumn(ctx: AuthCtx, projectId: string, args: Record<string, unknown>) {
-  const columns = await loadColumns(ctx, [projectId]);
+  const board = args.boardId ? await resolveBoard(ctx, projectId, args.boardId) : null;
+  const all = await loadColumns(ctx, [projectId]);
+  const columns = board ? all.filter((c) => c.boardId === board.id) : all;
   if (args.columnId) {
-    const hit = columns.find((c) => c.id === args.columnId || fold(c.name) === fold(args.columnId));
+    const hit =
+      columns.find((c) => c.id === args.columnId || fold(c.name) === fold(args.columnId)) ||
+      all.find((c) => c.id === args.columnId || fold(c.name) === fold(args.columnId));
     if (hit) return hit;
   }
   const status = resolveStatusKey(args.statusKey);
   if (status) {
-    return columns.find((c) => c.statusKey === status) || columns[0] || null;
+    return columns.find((c) => c.statusKey === status) || columns[0] || all.find((c) => c.statusKey === status) || all[0] || null;
   }
-  return columns[0] || null;
+  return columns[0] || all[0] || null;
 }
 
 async function syncLabels(ctx: AuthCtx, taskId: string, names: unknown) {
@@ -429,6 +507,7 @@ function buildStats(tasks: ReturnType<typeof mapTask>[], projects: ReturnType<ty
 }
 
 export async function getCatalog(ctx: AuthCtx) {
+  await ensurePeriods(ctx);
   const [projects, tasks, members, insights, activity] = await Promise.all([
     listProjectRows(ctx),
     fetchTasks(ctx),
@@ -436,7 +515,12 @@ export async function getCatalog(ctx: AuthCtx) {
     loadInsights(ctx),
     loadActivity(ctx, 8),
   ]);
-  const columns = await loadColumns(ctx, projects.map((p) => p.id as string));
+  const projectIds = projects.map((p) => p.id as string);
+  const [columns, boards] = await Promise.all([loadColumns(ctx, projectIds), loadBoards(ctx)]);
+  const sprints = await loadSprints(
+    ctx,
+    boards.map((b) => b.id as string),
+  );
   const { stats, workload } = buildStats(tasks, projects, members);
   const { data: statuses, error } = await ctx.supabase
     .from('master_statuses')
@@ -444,6 +528,7 @@ export async function getCatalog(ctx: AuthCtx) {
     .eq('workspace_id', ctx.workspaceId)
     .order('position');
   fail(error);
+  const boardById = Object.fromEntries(boards.map((b) => [b.id, b]));
   return {
     today: today(),
     workspace: { id: ctx.workspaceId, name: ctx.workspaceName },
@@ -470,6 +555,10 @@ export async function getCatalog(ctx: AuthCtx) {
       priority: t.priority,
       projectId: t.projectId,
       project: t.projectKey || t.projectName,
+      boardId: t.boardId,
+      board: t.boardName || null,
+      sprintId: t.sprintId,
+      sprint: t.sprintName || null,
       assigneeId: t.assigneeId,
       assignee: t.assignee,
       due: t.dueDate,
@@ -485,8 +574,12 @@ export async function getCatalog(ctx: AuthCtx) {
       name: c.name,
       statusKey: c.statusKey,
       projectId: c.projectId,
+      boardId: c.boardId,
+      boardName: boardById[c.boardId as string]?.name || null,
       wipLimit: c.wipLimit,
     })),
+    boards,
+    sprints: sprints.slice(0, 40),
   };
 }
 
@@ -495,11 +588,30 @@ export async function listProjects(ctx: AuthCtx) {
 }
 
 export async function getProjectBoard(ctx: AuthCtx, args: Record<string, unknown>) {
+  await ensurePeriods(ctx);
   const project = await resolveProject(ctx, args.projectId);
-  const columns = await loadColumns(ctx, [project.id as string]);
-  const tasks = await fetchTasks(ctx, { projectId: project.id });
+  const boards = await loadBoards(ctx, project.id as string);
+  const board = (await resolveBoard(ctx, project.id as string, args.boardId)) || boards[0];
+  if (!board) throw new ToolError('Board nao encontrado');
+  const sprints = board.kind === 'dynamic' ? await loadSprints(ctx, [board.id as string]) : [];
+  const sprint = args.sprintId
+    ? pick(sprints as unknown as Record<string, unknown>[], args.sprintId, ['name'])
+    : sprints.find((s) => s.status === 'active') || null;
+  if (args.sprintId && board.kind === 'dynamic' && !sprint) throw new ToolError('Sprint nao encontrado');
+  const columns = await loadColumns(ctx, [project.id as string], board.id as string);
+  const tasks = await fetchTasks(ctx, {
+    projectId: project.id,
+    boardId: board.id,
+    sprintId: sprint ? (sprint as { id: string }).id : undefined,
+    includeHistory: args.sprintId ? true : undefined,
+    currentOnly: args.sprintId ? false : true,
+  });
   return {
     project,
+    board,
+    boards,
+    sprint,
+    sprints,
     columns: columns.map((c) => ({
       ...c,
       tasks: tasks.filter((t) => t.columnId === c.id),
@@ -519,10 +631,28 @@ export async function listTasks(ctx: AuthCtx, args: Record<string, unknown>) {
   if (args.priority) filter.priority = PRIORITY[fold(args.priority)] || args.priority;
   if (args.statusKey) filter.statusKey = resolveStatusKey(args.statusKey) || args.statusKey;
   if (args.q) filter.q = args.q;
+  if (args.boardId) {
+    const projectId = (filter.projectId as string) || (await resolveBoardProject(ctx, args.boardId));
+    const board = await resolveBoard(ctx, projectId, args.boardId);
+    if (board) filter.boardId = board.id;
+  }
+  if (args.sprintId) {
+    filter.sprintId = args.sprintId;
+    filter.currentOnly = false;
+  }
+  if (args.includeHistory) filter.includeHistory = true;
   return fetchTasks(ctx, filter);
 }
 
+async function resolveBoardProject(ctx: AuthCtx, query: unknown) {
+  const boards = await loadBoards(ctx);
+  const hit = pick(boards as unknown as Record<string, unknown>[], query, ['name']);
+  if (!hit) throw new ToolError('Board nao encontrado: ' + String(query || '?'));
+  return hit.projectId as string;
+}
+
 export async function getMasterBoard(ctx: AuthCtx, args: Record<string, unknown>) {
+  await ensurePeriods(ctx);
   const { data: statuses, error } = await ctx.supabase
     .from('master_statuses')
     .select('*')
@@ -597,6 +727,19 @@ export async function createProject(ctx: AuthCtx, args: Record<string, unknown>)
   }
   fail(error);
 
+  const { data: board, error: bErr } = await ctx.supabase
+    .from('boards')
+    .insert({
+      project_id: data!.id,
+      name: 'Tarefas',
+      kind: 'normal',
+      is_default: true,
+      position: 0,
+    })
+    .select('*')
+    .single();
+  fail(bErr);
+
   const statuses = await statusByKey(ctx);
   const template = [
     { name: 'Backlog', statusKey: 'backlog', color: '#6E7A85' },
@@ -607,6 +750,7 @@ export async function createProject(ctx: AuthCtx, args: Record<string, unknown>)
   const { error: colErr } = await ctx.supabase.from('board_columns').insert(
     template.map((c, i) => ({
       project_id: data!.id,
+      board_id: board.id,
       master_status_id: statuses[c.statusKey]?.id,
       name: c.name,
       color: c.color,
@@ -651,6 +795,12 @@ export async function createTask(ctx: AuthCtx, args: Record<string, unknown>) {
     assigneeId = (pick(members as unknown as Record<string, unknown>[], assigneeId, ['name', 'email'])?.id as string) || null;
   }
 
+  let sprintId = args.sprintId ? String(args.sprintId) : null;
+  if (sprintId && !/^[0-9a-f-]{36}$/i.test(sprintId)) {
+    const sprints = await loadSprints(ctx, [column.boardId as string]);
+    sprintId = (pick(sprints as unknown as Record<string, unknown>[], sprintId, ['name'])?.id as string) || null;
+  }
+
   const { data: siblings } = await ctx.supabase.from('tasks').select('position').eq('column_id', column.id);
   const position = args.position != null
     ? Number(args.position)
@@ -671,6 +821,7 @@ export async function createTask(ctx: AuthCtx, args: Record<string, unknown>) {
       estimate_hours: Number(args.estimateHours) || 4,
       progress: Number(args.progress) || 0,
       position,
+      sprint_id: sprintId,
     })
     .select('*')
     .single();
@@ -703,7 +854,7 @@ export async function updateTask(ctx: AuthCtx, args: Record<string, unknown>) {
   if (args.progress != null) body.progress = Number(args.progress);
   if (args.position != null) body.position = Number(args.position);
 
-  if (args.columnId || args.statusKey) {
+  if (args.columnId || args.statusKey || args.boardId) {
     const projectId = args.projectId
       ? ((await resolveProject(ctx, args.projectId)).id as string)
       : (current.projectId as string);
@@ -734,10 +885,10 @@ export async function moveTask(ctx: AuthCtx, args: Record<string, unknown>) {
   await assertTask(ctx, current.id as string);
   let columnId = args.columnId ? String(args.columnId) : null;
   let statusKey = args.statusKey ? resolveStatusKey(args.statusKey) || String(args.statusKey) : null;
-  if (!columnId && !statusKey) throw new ToolError('Informe columnId ou statusKey');
-  if (columnId && !/^[0-9a-f-]{36}$/i.test(columnId)) {
+  if (!columnId && !statusKey && !args.boardId) throw new ToolError('Informe columnId, statusKey ou boardId');
+  if ((columnId && !/^[0-9a-f-]{36}$/i.test(columnId)) || args.boardId || (!columnId && statusKey)) {
     const column = await resolveColumn(ctx, current.projectId as string, args);
-    columnId = column?.id || null;
+    columnId = column?.id || columnId;
     statusKey = columnId ? null : statusKey;
   }
   const { data, error } = await ctx.supabase.rpc('move_task', {
@@ -758,6 +909,151 @@ export async function deleteTask(ctx: AuthCtx, args: Record<string, unknown>) {
   const { error } = await ctx.supabase.from('tasks').delete().eq('id', current.id);
   fail(error);
   return { ok: true, id: current.id, title: current.title };
+}
+
+export async function listBoards(ctx: AuthCtx, args: Record<string, unknown> = {}) {
+  await ensurePeriods(ctx);
+  const projectId = args.projectId ? ((await resolveProject(ctx, args.projectId)).id as string) : null;
+  return loadBoards(ctx, projectId);
+}
+
+export async function createBoard(ctx: AuthCtx, args: Record<string, unknown>) {
+  requireWrite(ctx);
+  const project = await resolveProject(ctx, args.projectId);
+  const kind = fold(args.kind) === 'dynamic' ? 'dynamic' : 'normal';
+  const { data, error } = await ctx.supabase.rpc('create_board', {
+    p_project_id: project.id,
+    p_name: String(args.name || args.title || 'Novo board').trim() || 'Novo board',
+    p_kind: kind,
+    p_frequency_days: kind === 'dynamic' ? Number(args.frequencyDays) || 7 : null,
+    p_columns: Array.isArray(args.columns) && args.columns.length ? args.columns : null,
+    p_is_default: Boolean(args.isDefault),
+  });
+  fail(error);
+  return mapBoard(data as Record<string, unknown>);
+}
+
+export async function updateBoard(ctx: AuthCtx, args: Record<string, unknown>) {
+  requireWrite(ctx);
+  const boards = await loadBoards(ctx);
+  const current = pick(boards as unknown as Record<string, unknown>[], args.id || args.boardId || args.name, ['name']);
+  if (!current) throw new ToolError('Board nao encontrado');
+  const body: Record<string, unknown> = {};
+  if (args.name != null) body.name = args.name;
+  if (args.kind != null) body.kind = fold(args.kind) === 'dynamic' ? 'dynamic' : 'normal';
+  if (fold(args.kind) === 'dynamic' || args.frequencyDays != null) {
+    body.frequency_days = Number(args.frequencyDays) || 7;
+  }
+  if (fold(args.kind) === 'normal') body.frequency_days = null;
+  if (args.isDefault != null) body.is_default = Boolean(args.isDefault);
+  if (!Object.keys(body).length) return current;
+  const { data, error } = await ctx.supabase.from('boards').update(body).eq('id', current.id).select('*').single();
+  fail(error);
+  return mapBoard(data as Record<string, unknown>);
+}
+
+export async function deleteBoard(ctx: AuthCtx, args: Record<string, unknown>) {
+  requireWrite(ctx);
+  const boards = await loadBoards(ctx);
+  const current = pick(boards as unknown as Record<string, unknown>[], args.id || args.boardId || args.name, ['name']);
+  if (!current) throw new ToolError('Board nao encontrado');
+  const { error } = await ctx.supabase.from('boards').delete().eq('id', current.id);
+  fail(error);
+  return { ok: true, id: current.id, name: current.name };
+}
+
+export async function listSprints(ctx: AuthCtx, args: Record<string, unknown>) {
+  await ensurePeriods(ctx);
+  let boardIds: string[] = [];
+  if (args.boardId) {
+    const projectId = args.projectId
+      ? ((await resolveProject(ctx, args.projectId)).id as string)
+      : await resolveBoardProject(ctx, args.boardId);
+    const board = await resolveBoard(ctx, projectId, args.boardId);
+    if (!board) throw new ToolError('Board nao encontrado');
+    boardIds = [board.id as string];
+  } else if (args.projectId) {
+    const project = await resolveProject(ctx, args.projectId);
+    const boards = await loadBoards(ctx, project.id as string);
+    boardIds = boards.map((b) => b.id as string);
+  } else {
+    const boards = await loadBoards(ctx);
+    boardIds = boards.map((b) => b.id as string);
+  }
+  return loadSprints(ctx, boardIds);
+}
+
+export async function createSprint(ctx: AuthCtx, args: Record<string, unknown>) {
+  requireWrite(ctx);
+  let boardId = '';
+  const named = args.boardId;
+  const project = args.projectId ? await resolveProject(ctx, args.projectId) : null;
+  if (named && /^[0-9a-f-]{36}$/i.test(String(named))) {
+    boardId = String(named);
+  } else if (named) {
+    const projectId = (project?.id as string) || (await resolveBoardProject(ctx, named));
+    const board = await resolveBoard(ctx, projectId, named);
+    if (!board) throw new ToolError('Board nao encontrado');
+    boardId = board.id as string;
+  } else if (project) {
+    const boards = await loadBoards(ctx, project.id as string);
+    const dynamic = boards.find((b) => b.kind === 'dynamic');
+    if (dynamic) {
+      boardId = dynamic.id as string;
+    } else {
+      const created = await createBoard(ctx, {
+        projectId: project.id,
+        name: 'Sprint',
+        kind: 'dynamic',
+        frequencyDays: Number(args.frequencyDays) || 7,
+      });
+      const opened = (await loadSprints(ctx, [created.id as string])).find((s) => s.status === 'active');
+      if (opened) {
+        if (args.name || args.title || args.startsOn || args.endsOn) {
+          const { data: patched, error: patchErr } = await ctx.supabase
+            .from('sprints')
+            .update({
+              name: String(args.name || args.title || opened.name),
+              starts_on: args.startsOn || opened.startsOn,
+              ends_on: args.endsOn || opened.endsOn,
+            })
+            .eq('id', opened.id)
+            .select('*')
+            .single();
+          fail(patchErr);
+          return mapSprint(patched as Record<string, unknown>);
+        }
+        return opened;
+      }
+      boardId = created.id as string;
+    }
+  } else {
+    throw new ToolError('Informe boardId ou projectId');
+  }
+  const { data, error } = await ctx.supabase.rpc('create_sprint', {
+    p_board_id: boardId,
+    p_starts_on: args.startsOn || null,
+    p_ends_on: args.endsOn || null,
+    p_name: args.name || args.title || null,
+  });
+  fail(error);
+  return mapSprint(data as Record<string, unknown>);
+}
+
+export async function closeSprint(ctx: AuthCtx, args: Record<string, unknown>) {
+  requireWrite(ctx);
+  let sprintId = args.id || args.sprintId;
+  if (!sprintId || !/^[0-9a-f-]{36}$/i.test(String(sprintId))) {
+    const sprints = await listSprints(ctx, { boardId: args.boardId, projectId: args.projectId });
+    const hit =
+      pick(sprints as unknown as Record<string, unknown>[], sprintId || args.name, ['name']) ||
+      sprints.find((s) => s.status === 'active');
+    if (!hit) throw new ToolError('Sprint nao encontrado');
+    sprintId = hit.id;
+  }
+  const { data, error } = await ctx.supabase.rpc('close_sprint', { p_sprint_id: sprintId });
+  fail(error);
+  return mapSprint(data as Record<string, unknown>);
 }
 
 export async function applyInsight(ctx: AuthCtx, args: Record<string, unknown>) {

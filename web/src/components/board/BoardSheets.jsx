@@ -438,3 +438,154 @@ export function ProjectSheet({ open, project, onClose, onSave }) {
     </Sheet>
   );
 }
+
+
+/* ----------------------------------------------------------- BoardSheet */
+
+const FREQ_PRESETS = [
+  { value: 7, label: '7 dias' },
+  { value: 14, label: '14 dias' },
+  { value: 30, label: '30 dias' },
+];
+
+export function BoardSheet({ open, board, canDelete, onClose, onSave, onDelete }) {
+  const [form, setForm] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const freq = board?.frequencyDays || 7;
+    const preset = FREQ_PRESETS.some((p) => p.value === freq) ? String(freq) : 'custom';
+    setForm({
+      name: board?.name ?? '',
+      kind: board?.kind === 'dynamic' ? 'dynamic' : 'normal',
+      frequencyPreset: preset,
+      frequencyDays: String(freq),
+    });
+  }, [open, board]);
+
+  if (!form) return null;
+
+  const frequencyDays =
+    form.kind === 'dynamic'
+      ? Number(form.frequencyPreset === 'custom' ? form.frequencyDays : form.frequencyPreset) || 7
+      : null;
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      width="sm:max-w-[480px]"
+      eyebrow="Produto"
+      title={board ? 'Editar board' : 'Novo board'}
+      subtitle="Normal e so tarefas. Dinamico abre sprints na frequencia que voce escolher."
+      footer={
+        <>
+          {board && canDelete && onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(board)}
+              className="btn-ghost mr-auto !border-rose/25 !text-rose hover:!bg-rose/10"
+            >
+              <IconTrash size={14} /> Excluir
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="btn-ghost">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={!form.name.trim()}
+            onClick={() =>
+              onSave({
+                name: form.name.trim(),
+                kind: form.kind,
+                frequencyDays,
+              })
+            }
+            className="btn-primary"
+          >
+            {board ? 'Salvar' : 'Criar board'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Nome">
+          <input
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            className="field"
+            placeholder="Ex: Sprint de produto"
+            autoFocus
+          />
+        </Field>
+
+        <Field label="Tipo">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              { id: 'normal', title: 'Normal', hint: 'Quadro continuo de tarefas' },
+              { id: 'dynamic', title: 'Dinamico', hint: 'Sprints com frequencia' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, kind: opt.id }))}
+                className={
+                  'rounded-2xl border p-3 text-left transition ' +
+                  (form.kind === opt.id ? 'border-amber/50 bg-amber/[0.07]' : 'border-line bg-white/[0.03] hover:border-white/20')
+                }
+              >
+                <p className="text-[12.5px] text-chalk">{opt.title}</p>
+                <p className="mt-1 text-[10.5px] text-smoke">{opt.hint}</p>
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        {form.kind === 'dynamic' && (
+          <Field label="Frequencia do sprint" hint="O board abre um sprint novo quando o ciclo acaba">
+            <div className="flex flex-wrap gap-2">
+              {FREQ_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, frequencyPreset: String(p.value), frequencyDays: String(p.value) }))}
+                  className={
+                    'rounded-full border px-3 py-1.5 text-[12px] transition ' +
+                    (form.frequencyPreset === String(p.value)
+                      ? 'border-amber/50 bg-amber/10 text-amber'
+                      : 'border-line bg-white/[0.04] text-smoke hover:text-chalk')
+                  }
+                >
+                  {p.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, frequencyPreset: 'custom' }))}
+                className={
+                  'rounded-full border px-3 py-1.5 text-[12px] transition ' +
+                  (form.frequencyPreset === 'custom'
+                    ? 'border-amber/50 bg-amber/10 text-amber'
+                    : 'border-line bg-white/[0.04] text-smoke hover:text-chalk')
+                }
+              >
+                Custom
+              </button>
+            </div>
+            {form.frequencyPreset === 'custom' && (
+              <input
+                type="number"
+                min="1"
+                value={form.frequencyDays}
+                onChange={(e) => setForm((f) => ({ ...f, frequencyDays: e.target.value }))}
+                className="field mt-2"
+                placeholder="Dias"
+              />
+            )}
+          </Field>
+        )}
+      </div>
+    </Sheet>
+  );
+}

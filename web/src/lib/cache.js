@@ -42,6 +42,7 @@ export function cacheInvalidateWorkspace() {
   cacheRemovePrefix('tasks');
   cacheRemovePrefix('master-board');
   cacheRemovePrefix('board:');
+  cacheRemovePrefix('boards:');
   cacheRemovePrefix('all-columns');
 }
 

@@ -13,6 +13,7 @@ const SCHEMA = {
     suggestions: { type: 'array', items: { type: 'string' } },
     actions: {
       type: 'array',
+      maxItems: 12,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -26,6 +27,8 @@ const SCHEMA = {
           'color',
           'icon',
           'projectId',
+          'boardId',
+          'sprintId',
           'columnId',
           'statusKey',
           'priority',
@@ -34,9 +37,27 @@ const SCHEMA = {
           'estimateHours',
           'progress',
           'labels',
+          'kind',
+          'frequencyDays',
+          'startsOn',
+          'endsOn',
         ],
         properties: {
-          op: { type: 'string', enum: ['create_project', 'create_task', 'update_task'] },
+          op: {
+            type: 'string',
+            enum: [
+              'create_project',
+              'create_task',
+              'update_task',
+              'delete_task',
+              'move_task',
+              'create_board',
+              'update_board',
+              'delete_board',
+              'create_sprint',
+              'close_sprint',
+            ],
+          },
           id: { type: 'string' },
           name: { type: 'string' },
           key: { type: 'string' },
@@ -45,6 +66,8 @@ const SCHEMA = {
           color: { type: 'string' },
           icon: { type: 'string' },
           projectId: { type: 'string' },
+          boardId: { type: 'string' },
+          sprintId: { type: 'string' },
           columnId: { type: 'string' },
           statusKey: { type: 'string' },
           priority: { type: 'string' },
@@ -53,6 +76,10 @@ const SCHEMA = {
           estimateHours: { type: 'string' },
           progress: { type: 'string' },
           labels: { type: 'string' },
+          kind: { type: 'string' },
+          frequencyDays: { type: 'string' },
+          startsOn: { type: 'string' },
+          endsOn: { type: 'string' },
         },
       },
     },
@@ -125,12 +152,12 @@ Deno.serve(async (req) => {
       {
         role: 'system',
         content:
-          'Voce e o Kanbot. Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Se o usuario pedir criar projeto, criar tarefa ou editar tarefa, preencha actions. Consultas: actions vazio. Se houver print do monitor, use a imagem com o catalogo.\n\nCATALOGO:\n' +
+          'Voce e o Kanbot, copiloto de um kanban multi-produto: cada produto tem varios boards (normal = continuo; dinamico = sprints). Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Actions: create_project, create_task, update_task, delete_task, move_task, create_board, update_board, delete_board, create_sprint, close_sprint. "neste board" = boardId do contexto. Consultas: actions vazio. Se houver print do monitor, use a imagem com o catalogo.\n\nCATALOGO:\n' +
           JSON.stringify(catalog) +
           (context
             ? '\n\nCONTEXTO ATUAL DA TELA (o usuario esta olhando isto agora):\n' +
               JSON.stringify(context) +
-              '\n"esta tarefa"/"isso" = openTask do contexto (use o id em update_task). "este projeto"/"aqui" = projectId do contexto.'
+              '\n"esta tarefa"/"isso" = openTask. "este projeto"/"aqui" = projectId. "neste board" = boardId do contexto.'
             : ''),
       },
       ...history.slice(-8).map((m: { role?: string; text?: string }) => ({

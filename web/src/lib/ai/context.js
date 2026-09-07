@@ -113,6 +113,15 @@ export function contextPayload(ctx = {}) {
     payload.projectName = ctx.projectName || null;
     payload.projectKey = ctx.projectKey || null;
   }
+  if (ctx.boardId) {
+    payload.boardId = ctx.boardId;
+    payload.boardName = ctx.boardName || null;
+    payload.boardKind = ctx.boardKind || null;
+  }
+  if (ctx.sprintId) {
+    payload.sprintId = ctx.sprintId;
+    payload.sprintName = ctx.sprintName || null;
+  }
   if (ctx.openTask) {
     const t = ctx.openTask;
     payload.openTask = clean({
@@ -174,6 +183,20 @@ export function describeContext(context) {
     );
   } else {
     lines.push('O usuario esta na visao master (todos os projetos).');
+  }
+  if (context.boardId) {
+    lines.push(
+      'Board em foco: ' +
+        (context.boardName || context.boardId) +
+        ' (id ' +
+        context.boardId +
+        ', tipo ' +
+        (context.boardKind || 'normal') +
+        '). "neste board"/"aqui" = este boardId.',
+    );
+  }
+  if (context.sprintId) {
+    lines.push('Sprint em foco: ' + (context.sprintName || context.sprintId) + ' (id ' + context.sprintId + ').');
   }
   if (context.watchingScreen) {
     lines.push(

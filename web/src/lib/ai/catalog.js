@@ -7,6 +7,10 @@ function compactTask(t) {
     priority: t.priority,
     projectId: t.projectId,
     project: t.projectKey || t.projectName,
+    boardId: t.boardId || null,
+    board: t.boardName || null,
+    sprintId: t.sprintId || null,
+    sprint: t.sprintName || null,
     assigneeId: t.assigneeId,
     assignee: t.assignee?.name || null,
     due: t.dueDate,
@@ -27,6 +31,8 @@ export function buildCatalog({
   workload = [],
   activity = [],
   columns = [],
+  boards = [],
+  sprints = [],
   today,
 } = {}) {
   return {
@@ -82,7 +88,26 @@ export function buildCatalog({
       statusKey: c.statusKey || c.status,
       projectId: c.projectId,
       projectName: c.projectName || c.project,
+      boardId: c.boardId || null,
+      boardName: c.boardName || null,
       wipLimit: c.wipLimit ?? null,
+    })),
+    boards: (boards || []).map((b) => ({
+      id: b.id,
+      name: b.name,
+      kind: b.kind,
+      projectId: b.projectId,
+      frequencyDays: b.frequencyDays ?? null,
+      isDefault: Boolean(b.isDefault),
+    })),
+    sprints: (sprints || []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      boardId: s.boardId,
+      projectId: s.projectId,
+      status: s.status,
+      startsOn: s.startsOn,
+      endsOn: s.endsOn,
     })),
   };
 }
@@ -98,6 +123,8 @@ function uniqueColumns(tasks) {
       statusKey: t.statusKey || t.status,
       projectId: t.projectId,
       projectName: t.projectKey || t.project,
+      boardId: t.boardId || null,
+      boardName: t.boardName || t.board || null,
     });
   }
   return [...map.values()];
@@ -110,6 +137,8 @@ export function indexCatalog(catalog) {
   const insights = catalog?.insights || [];
   const columns = catalog?.columns || [];
   const workload = catalog?.workload || [];
+  const boards = catalog?.boards || [];
+  const sprints = catalog?.sprints || [];
   return {
     catalog,
     taskById: Object.fromEntries(tasks.map((t) => [t.id, t])),
@@ -117,6 +146,8 @@ export function indexCatalog(catalog) {
     projectById: Object.fromEntries(projects.map((p) => [p.id, p])),
     insightById: Object.fromEntries(insights.map((i) => [i.id, i])),
     columnById: Object.fromEntries(columns.map((c) => [c.id, c])),
+    boardById: Object.fromEntries(boards.map((b) => [b.id, b])),
+    sprintById: Object.fromEntries(sprints.map((s) => [s.id, s])),
     workloadById: Object.fromEntries(workload.map((m) => [m.id, m])),
   };
 }

@@ -66,7 +66,7 @@ async function handleMessage(message: unknown, ctx: Awaited<ReturnType<typeof au
         instructions:
           'Kanbot MCP do workspace "' +
           ctx.workspaceName +
-          '". Comece com get_catalog. Status: backlog, in_progress, review, blocked, done. projectId aceita UUID, key ou nome.',
+          '". Cada produto tem varios boards (normal = continuo, dynamic = sprints). Comece com get_catalog. Status: backlog, in_progress, review, blocked, done. projectId/boardId aceitam UUID, key ou nome.',
       });
     }
     if (msg.method === 'notifications/initialized' || msg.method === 'notifications/cancelled') {

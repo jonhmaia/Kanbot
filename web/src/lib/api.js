@@ -6,6 +6,7 @@ import { coverageSeries, forecastSeries } from './dashboardExtras';
 import { STATUS_META, TODAY } from './format';
 import {
   mapActivity,
+  mapBoard,
   mapChecklist,
   mapColumn,
   mapFocusSession,
@@ -14,6 +15,7 @@ import {
   mapMember,
   mapNotification,
   mapProject,
+  mapSprint,
   mapStatus,
   mapTask,
   mapWorkspace,
@@ -150,12 +152,45 @@ async function fetchExpandedTasks(filter = {}) {
   let query = client.from('v_tasks_expanded').select('*');
   if (filter.workspaceId) query = query.eq('workspace_id', filter.workspaceId);
   if (filter.projectId) query = query.eq('project_id', filter.projectId);
+  if (filter.boardId) query = query.eq('board_id', filter.boardId);
+  if (filter.sprintId) query = query.eq('sprint_id', filter.sprintId);
   if (filter.assigneeId) query = query.eq('assignee_id', filter.assigneeId);
   if (filter.priority) query = query.eq('priority', filter.priority);
   if (filter.q) query = query.or('title.ilike.%' + filter.q + '%,description.ilike.%' + filter.q + '%');
+  if (filter.sprintId) {
+    /* historico de um sprint: nao filtrar is_current */
+  } else if (filter.includeHistory) {
+    /* tudo, inclusive sprints fechados */
+  } else if (filter.currentOnly !== false) {
+    query = query.eq('is_current', true);
+  }
   const { data, error } = await query.order('position');
   fail(error);
   return data || [];
+}
+
+async function loadBoards(projectId) {
+  const client = await requireSession();
+  const { data, error } = await client.from('boards').select('*').eq('project_id', projectId).order('position');
+  fail(error);
+  return (data || []).map(mapBoard);
+}
+
+async function loadSprints(boardId) {
+  const client = await requireSession();
+  const { data, error } = await client
+    .from('sprints')
+    .select('*')
+    .eq('board_id', boardId)
+    .order('starts_on', { ascending: false });
+  fail(error);
+  return (data || []).map(mapSprint);
+}
+
+async function pickBoard(projectId, boardId) {
+  const boards = await loadBoards(projectId);
+  if (!boards.length) throw new Error('Este produto nao tem boards');
+  return boards.find((b) => b.id === boardId) || boards.find((b) => b.isDefault) || boards[0];
 }
 
 async function statusByKey(ws) {
@@ -504,21 +539,36 @@ export const api = {
     fail(error);
   },
 
-  projectBoard: async (id) => {
+  projectBoard: async (id, opts = {}) => {
     const client = await requireSession();
+    await client.rpc('ensure_dynamic_periods');
     const { data: project, error } = await client.from('projects').select('*').eq('id', id).maybeSingle();
     fail(error);
     if (!project) throw new Error('Projeto nao encontrado');
     const members = await loadProjectMembers(id);
+    const boards = await loadBoards(id);
+    const board = boards.find((b) => b.id === opts.boardId) || boards.find((b) => b.isDefault) || boards[0];
+    if (!board) throw new Error('Board nao encontrado');
+    const sprints = board.kind === 'dynamic' ? await loadSprints(board.id) : [];
+    const sprint =
+      board.kind === 'dynamic'
+        ? sprints.find((s) => s.id === opts.sprintId) || sprints.find((s) => s.status === 'active') || sprints[0] || null
+        : null;
     const { data: columns, error: cErr } = await client
       .from('board_columns')
       .select('*, master_statuses (key)')
-      .eq('project_id', id)
+      .eq('board_id', board.id)
       .order('position');
     fail(cErr);
-    const tasks = await decorateTasks(await fetchExpandedTasks({ projectId: id }), members);
+    const taskFilter = { projectId: id, boardId: board.id };
+    if (sprint) taskFilter.sprintId = sprint.id;
+    const tasks = await decorateTasks(await fetchExpandedTasks(taskFilter), members);
     return {
       project: mapProject(project, {}, members.map((m) => m.id)),
+      board,
+      boards,
+      sprint,
+      sprints,
       members,
       columns: (columns || []).map((c) => ({
         ...mapColumn({ ...c, status_key: c.master_statuses?.key }),
@@ -527,15 +577,87 @@ export const api = {
     };
   },
 
+  listBoards: async (projectId) => loadBoards(projectId),
+
+  createBoard: async (projectId, input = {}) => {
+    const client = await requireSession();
+    const { data, error } = await client.rpc('create_board', {
+      p_project_id: projectId,
+      p_name: input.name?.trim() || 'Novo board',
+      p_kind: input.kind === 'dynamic' ? 'dynamic' : 'normal',
+      p_frequency_days: input.kind === 'dynamic' ? Number(input.frequencyDays) || 7 : null,
+      p_columns: Array.isArray(input.columns) && input.columns.length ? input.columns : null,
+      p_is_default: Boolean(input.isDefault),
+    });
+    fail(error);
+    return mapBoard(data);
+  },
+
+  updateBoard: async (id, patch) => {
+    const client = await requireSession();
+    const body = {};
+    if (patch.name != null) body.name = patch.name;
+    if (patch.kind != null) body.kind = patch.kind === 'dynamic' ? 'dynamic' : 'normal';
+    if (patch.kind === 'dynamic' || patch.frequencyDays != null) {
+      body.frequency_days = Number(patch.frequencyDays) || 7;
+    }
+    if (patch.kind === 'normal') body.frequency_days = null;
+    if (patch.position != null) body.position = patch.position;
+    if (patch.isDefault != null) body.is_default = Boolean(patch.isDefault);
+    if (!Object.keys(body).length) {
+      const { data, error } = await client.from('boards').select('*').eq('id', id).single();
+      fail(error);
+      return mapBoard(data);
+    }
+    const { data, error } = await client.from('boards').update(body).eq('id', id).select('*').single();
+    fail(error);
+    return mapBoard(data);
+  },
+
+  deleteBoard: async (id) => {
+    const client = await requireSession();
+    const { error } = await client.from('boards').delete().eq('id', id);
+    fail(error);
+  },
+
+  listSprints: async (boardId) => loadSprints(boardId),
+
+  createSprint: async (boardId, input = {}) => {
+    const client = await requireSession();
+    const { data, error } = await client.rpc('create_sprint', {
+      p_board_id: boardId,
+      p_starts_on: input.startsOn || null,
+      p_ends_on: input.endsOn || null,
+      p_name: input.name || null,
+    });
+    fail(error);
+    return mapSprint(data);
+  },
+
+  closeSprint: async (sprintId) => {
+    const client = await requireSession();
+    const { data, error } = await client.rpc('close_sprint', { p_sprint_id: sprintId });
+    fail(error);
+    return mapSprint(data);
+  },
+
+  ensureDynamicPeriods: async () => {
+    const client = await requireSession();
+    const { error } = await client.rpc('ensure_dynamic_periods');
+    fail(error);
+  },
+
   createColumn: async (projectId, input) => {
     const client = await requireSession();
+    const board = await pickBoard(projectId, input.boardId);
     const masterStatusId = await resolveMasterStatusId(projectId, input.statusKey);
-    const { data: siblings } = await client.from('board_columns').select('position').eq('project_id', projectId);
+    const { data: siblings } = await client.from('board_columns').select('position').eq('board_id', board.id);
     const position = input.position ?? (siblings?.length ? Math.max(...siblings.map((s) => Number(s.position))) + 1 : 0);
     const { data, error } = await client
       .from('board_columns')
       .insert({
         project_id: projectId,
+        board_id: board.id,
         master_status_id: masterStatusId,
         name: input.name?.trim() || 'Nova coluna',
         color: input.color || '#6E7A85',
@@ -620,6 +742,7 @@ export const api = {
         estimate_hours: Number(input.estimateHours) || 4,
         progress: Number(input.progress) || 0,
         position,
+        sprint_id: input.sprintId || null,
       })
       .select('*')
       .single();
@@ -927,6 +1050,8 @@ export const api = {
   },
 
   ask: async (prompt = '', history = [], context = null, image = null) => {
+    const client = await requireSession();
+    await client.rpc('ensure_dynamic_periods');
     const dash = await api.dashboard();
     const live = {
       tasks: dash.tasks || [],
@@ -939,6 +1064,7 @@ export const api = {
       activity: dash.activity,
     };
     const columns = await loadCatalogColumns(live.projects);
+    const { boards, sprints } = await loadCatalogBoards(live.projects);
     const catalog = buildCatalog({
       tasks: live.tasks,
       projects: live.projects,
@@ -949,6 +1075,8 @@ export const api = {
       workload: dash.workload,
       activity: dash.activity,
       columns,
+      boards,
+      sprints,
       today: TODAY,
     });
 
@@ -969,20 +1097,61 @@ async function loadCatalogColumns(projects) {
   const client = await requireSession();
   const { data, error } = await client
     .from('board_columns')
-    .select('id, name, color, wip_limit, project_id, master_statuses (key)')
+    .select('id, name, color, wip_limit, project_id, board_id, master_statuses (key)')
     .in('project_id', ids)
     .order('position');
   fail(error);
   const byId = Object.fromEntries(projects.map((p) => [p.id, p]));
-  return (data || []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    statusKey: c.master_statuses?.key,
-    projectId: c.project_id,
-    projectName: byId[c.project_id]?.name,
-    projectKey: byId[c.project_id]?.key,
-    wipLimit: c.wip_limit,
-  }));
+  let boards = [];
+  try {
+    const { data: boardRows, error: bErr } = await client
+      .from('boards')
+      .select('id, name, kind, project_id, is_default, frequency_days')
+      .in('project_id', ids)
+      .order('position');
+    fail(bErr);
+    boards = boardRows || [];
+  } catch {
+    boards = [];
+  }
+  const boardById = Object.fromEntries(boards.map((b) => [b.id, b]));
+  return (data || []).map((c) => {
+    const board = boardById[c.board_id];
+    return {
+      id: c.id,
+      name: c.name,
+      statusKey: c.master_statuses?.key,
+      projectId: c.project_id,
+      projectName: byId[c.project_id]?.name,
+      projectKey: byId[c.project_id]?.key,
+      boardId: c.board_id,
+      boardName: board?.name,
+      boardKind: board?.kind,
+      wipLimit: c.wip_limit,
+    };
+  });
+}
+
+async function loadCatalogBoards(projects) {
+  const ids = (projects || []).map((p) => p.id);
+  if (!ids.length) return { boards: [], sprints: [] };
+  const client = await requireSession();
+  const { data: boardRows, error } = await client
+    .from('boards')
+    .select('id, name, kind, project_id, is_default, frequency_days, position')
+    .in('project_id', ids)
+    .order('position');
+  fail(error);
+  const boards = (boardRows || []).map(mapBoard);
+  const boardIds = boards.map((b) => b.id);
+  if (!boardIds.length) return { boards, sprints: [] };
+  const { data: sprintRows, error: sErr } = await client
+    .from('sprints')
+    .select('*')
+    .in('board_id', boardIds)
+    .order('starts_on', { ascending: false });
+  fail(sErr);
+  return { boards, sprints: (sprintRows || []).map(mapSprint).slice(0, 40) };
 }
 
 async function askModel(prompt, history, catalog, context, image = null) {

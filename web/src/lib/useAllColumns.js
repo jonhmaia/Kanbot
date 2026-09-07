@@ -12,9 +12,18 @@ export default function useAllColumns() {
 
   const load = useCallback(async () => {
     const projects = await api.projects();
-    const boards = await Promise.all(projects.map((p) => api.projectBoard(p.id)));
-    const flat = boards.flatMap((b) =>
-      b.columns.map((c) => ({ ...c, name: b.project.name + ' — ' + c.name, projectName: b.project.name })),
+    const boards = await Promise.all(projects.map((p) => api.listBoards(p.id)));
+    const views = await Promise.all(
+      boards.flatMap((list, i) => list.map((board) => api.projectBoard(projects[i].id, { boardId: board.id }))),
+    );
+    const flat = views.flatMap((b) =>
+      b.columns.map((c) => ({
+        ...c,
+        name: b.project.name + ' — ' + (b.board?.name || 'Board') + ' — ' + c.name,
+        projectName: b.project.name,
+        boardId: b.board?.id,
+        boardName: b.board?.name,
+      })),
     );
     cacheSet('all-columns', flat);
     setColumns(flat);
