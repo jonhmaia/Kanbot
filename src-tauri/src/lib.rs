@@ -34,11 +34,11 @@ fn normalize_edge(edge: &str) -> &'static str {
 
 fn island_size(edge: &str, expanded: bool) -> (f64, f64) {
     match (normalize_edge(edge), expanded) {
-        (_, true) => (312.0, 360.0),
+        (_, true) => (360.0, 560.0),
         ("chatdock", false) => (56.0, 56.0),
-        ("left", false) | ("right", false) => (44.0, 168.0),
-        ("top", false) if cfg!(target_os = "macos") => (236.0, 38.0),
-        _ => (264.0, 44.0),
+        ("left", false) | ("right", false) => (76.0, 248.0),
+        ("top", false) if cfg!(target_os = "macos") => (280.0, 40.0),
+        _ => (280.0, 44.0),
     }
 }
 
@@ -63,25 +63,18 @@ fn place_island(window: &tauri::WebviewWindow, edge: &str, width: f64, height: f
     let scale = monitor.scale_factor();
     let w = px(scale, width);
     let h = px(scale, height);
-    let pad = px(scale, 10.0);
-    let top_pad = if cfg!(target_os = "macos") { 0 } else { pad };
+    let corner = px(scale, 10.0);
     let (x, y) = match normalize_edge(edge) {
-        "left" => (
-            origin.x + pad,
-            origin.y + (screen.height as i32 - h) / 2,
-        ),
+        "left" => (origin.x, origin.y + (screen.height as i32 - h) / 2),
         "right" => (
-            origin.x + screen.width as i32 - w - pad,
+            origin.x + screen.width as i32 - w,
             origin.y + (screen.height as i32 - h) / 2,
         ),
         "chatdock" => (
-            origin.x + screen.width as i32 - w - pad,
-            origin.y + screen.height as i32 - h - pad,
+            origin.x + screen.width as i32 - w - corner,
+            origin.y + screen.height as i32 - h - corner,
         ),
-        _ => (
-            origin.x + (screen.width as i32 - w) / 2,
-            origin.y + top_pad,
-        ),
+        _ => (origin.x + (screen.width as i32 - w) / 2, origin.y),
     };
     let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 }
@@ -100,6 +93,9 @@ fn apply_island_layout(
         .set_size(tauri::LogicalSize::new(width, height))
         .map_err(|e| e.to_string())?;
     place_island(island, &dock, width, height);
+    if expanded {
+        let _ = island.set_focus();
+    }
     if changed {
         let _ = island.emit("island-edge", dock.clone());
     }
@@ -240,6 +236,65 @@ fn open_chat(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn capture_screen(app: tauri::AppHandle) -> Result<String, String> {
+    let point = app.get_webview_window("island").and_then(|island| {
+        island_monitor(&island).map(|monitor| {
+            let origin = monitor.position();
+            let size = monitor.size();
+            (
+                origin.x + size.width as i32 / 2,
+                origin.y + size.height as i32 / 2,
+            )
+        })
+    });
+
+    let monitor = if let Some((x, y)) = point {
+        xcap::Monitor::from_point(x, y).map_err(|e| e.to_string())?
+    } else {
+        xcap::Monitor::all()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|item| item.is_primary().unwrap_or(false))
+            .ok_or_else(|| "Nenhum monitor encontrado".to_string())?
+    };
+
+    let rgba = monitor.capture_image().map_err(|e| {
+        format!(
+            "Nao consegui capturar a tela. No macOS, permita gravacao de tela para o Kanbot. ({e})"
+        )
+    })?;
+
+    let mut img = image::DynamicImage::ImageRgba8(rgba);
+    let (width, height) = image::GenericImageView::dimensions(&img);
+    let max = 1280u32;
+    if width.max(height) > max {
+        let scale = max as f32 / width.max(height) as f32;
+        img = img.resize(
+            ((width as f32) * scale).round().max(1.0) as u32,
+            ((height as f32) * scale).round().max(1.0) as u32,
+            image::imageops::FilterType::Triangle,
+        );
+    }
+
+    let rgb = img.to_rgb8();
+    let mut out = Vec::new();
+    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 55);
+    encoder
+        .encode(
+            rgb.as_raw(),
+            rgb.width(),
+            rgb.height(),
+            image::ExtendedColorType::Rgb8,
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(format!(
+        "data:image/jpeg;base64,{}",
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, out)
+    ))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -305,7 +360,8 @@ pub fn run() {
             resize_island,
             start_drag_island,
             snap_island,
-            open_chat
+            open_chat,
+            capture_screen
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o Kanbot");

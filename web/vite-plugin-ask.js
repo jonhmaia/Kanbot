@@ -34,6 +34,8 @@ async function handleAsk(req, res, apiKey) {
       prompt: body.prompt || '',
       history: body.history || [],
       catalog: body.catalog || {},
+      context: body.context || null,
+      image: body.image || null,
     });
     send(res, 200, { content });
   } catch (e) {

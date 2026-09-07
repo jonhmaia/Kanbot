@@ -926,7 +926,7 @@ export const api = {
     return (data || []).map(mapFocusSession);
   },
 
-  ask: async (prompt = '', history = [], context = null) => {
+  ask: async (prompt = '', history = [], context = null, image = null) => {
     const dash = await api.dashboard();
     const live = {
       tasks: dash.tasks || [],
@@ -952,7 +952,7 @@ export const api = {
       today: TODAY,
     });
 
-    const parsed = await askModel(prompt, history, catalog, context);
+    const parsed = await askModel(prompt, history, catalog, context, image);
     let reply = parsed ? parseAssistantReply(parsed, { catalog, live }) : heuristicReply(prompt, { catalog, live });
     if (reply.actions?.length) {
       const applied = await applyAskActions(reply.actions, { api, catalog, context });
@@ -985,12 +985,12 @@ async function loadCatalogColumns(projects) {
   }));
 }
 
-async function askModel(prompt, history, catalog, context) {
+async function askModel(prompt, history, catalog, context, image = null) {
   try {
     const res = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, history, catalog, context }),
+      body: JSON.stringify({ prompt, history, catalog, context, image }),
     });
     if (res.ok) {
       const data = await res.json();
@@ -1004,7 +1004,7 @@ async function askModel(prompt, history, catalog, context) {
   try {
     const client = await requireSession();
     const { data, error } = await client.functions.invoke('kanbot-ask', {
-      body: { prompt, history, catalog, context },
+      body: { prompt, history, catalog, context, image },
     });
     if (!error && (data?.content || data?.answer || data?.blocks)) return data.content || data;
   } catch {

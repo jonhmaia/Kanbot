@@ -1,7 +1,22 @@
-import { OPENROUTER_MODEL, OPENROUTER_URL, REPLY_JSON_SCHEMA, buildSystemPrompt } from './schema.js';
+import { OPENROUTER_MODEL, OPENROUTER_URL, OPENROUTER_VISION_MODEL, REPLY_JSON_SCHEMA, buildSystemPrompt } from './schema.js';
 import { describeContext } from './context.js';
 
-export async function callOpenRouter({ apiKey, prompt, history = [], catalog, context = null }) {
+function userContent(prompt, image) {
+  if (!image) return prompt;
+  return [
+    { type: 'text', text: prompt || 'O que voce ve nesta tela?' },
+    { type: 'image_url', image_url: { url: image } },
+  ];
+}
+
+export async function callOpenRouter({
+  apiKey,
+  prompt,
+  history = [],
+  catalog,
+  context = null,
+  image = null,
+}) {
   if (!apiKey) throw new Error('OPENROUTER_API_KEY ausente');
 
   const messages = [
@@ -17,7 +32,7 @@ export async function callOpenRouter({ apiKey, prompt, history = [], catalog, co
       role: m.role === 'bot' || m.role === 'assistant' ? 'assistant' : 'user',
       content: typeof m.text === 'string' ? m.text : String(m.content || ''),
     })),
-    { role: 'user', content: prompt },
+    { role: 'user', content: userContent(prompt, image) },
   ];
 
   const headers = {
@@ -28,7 +43,7 @@ export async function callOpenRouter({ apiKey, prompt, history = [], catalog, co
   };
 
   const bodyBase = {
-    model: OPENROUTER_MODEL,
+    model: image ? OPENROUTER_VISION_MODEL : OPENROUTER_MODEL,
     messages,
     temperature: 0.25,
     max_tokens: 2200,

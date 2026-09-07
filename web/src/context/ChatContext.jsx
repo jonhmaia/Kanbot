@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
+import { persistChatThread, readChatThread, subscribeChatBus } from '../lib/chatBus';
 import { listenDesktop } from '../lib/desktop';
 import { contextChips, contextLabel, contextPayload, mergeContext, routeContext } from '../lib/ai/context';
 import { useApp } from './AppContext';
@@ -8,9 +9,13 @@ import { useFocus } from './FocusContext';
 
 const ChatContext = createContext(null);
 
+function sameThread(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /**
- * Assistente unico do Kanbot. Uma so conversa, aberta pelo botao do assistente,
- * sempre ciente da tela atual e da tarefa aberta.
+ * Assistente unico do Kanbot. Uma so conversa, aberta pelo botao do assistente
+ * ou pela Notch, sempre ciente da tela atual e da tarefa aberta.
  */
 export function ChatProvider({ children }) {
   const { loadProjects, loadBootstrap, notify, currentUser, projects } = useApp();
@@ -18,13 +23,26 @@ export function ChatProvider({ children }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => readChatThread().messages);
   const [value, setValue] = useState('');
   const [thinking, setThinking] = useState(false);
-  const [suggested, setSuggested] = useState(null);
+  const [suggested, setSuggested] = useState(() => readChatThread().suggested);
   const [extras, setExtras] = useState({});
 
-  /* cada tela publica o que ela sabe (tarefa aberta, filtros, numeros da view) */
+  useEffect(() => {
+    const thread = readChatThread();
+    setMessages(thread.messages);
+    setSuggested(thread.suggested);
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    return subscribeChatBus((next) => {
+      if (!next) return;
+      setMessages((current) => (sameThread(current, next.messages) ? current : next.messages || []));
+      setSuggested((current) => (sameThread(current, next.suggested) ? current : next.suggested));
+    });
+  }, []);
+
   const publishContext = useCallback((source, payload) => {
     setExtras((current) => {
       if (!payload) {
@@ -37,7 +55,6 @@ export function ChatProvider({ children }) {
     });
   }, []);
 
-  /* sessao de foco em andamento tambem e contexto: "a tarefa que estou tocando" */
   const focusPhase = focusSession?.phase;
   const focus = useMemo(
     () => (running && activeTask ? { taskId: activeTask.id, title: activeTask.title, phase: focusPhase } : null),
@@ -52,15 +69,22 @@ export function ChatProvider({ children }) {
   const chips = suggested?.length ? suggested : contextChips(context);
 
   const send = useCallback(
-    async (text) => {
+    async (text, options = {}) => {
       const prompt = (text ?? value).trim();
-      if (!prompt || thinking) return;
+      const image = typeof options.image === 'string' && options.image.startsWith('data:image') ? options.image : null;
+      if ((!prompt && !image) || thinking) return;
+      const asked = prompt || 'O que voce ve nesta tela?';
       setValue('');
       const history = messages.map((m) => ({ role: m.role, text: m.text }));
-      setMessages((m) => [...m, { role: 'user', text: prompt }]);
+      const userMessage = { role: 'user', text: asked, sawScreen: Boolean(image) };
+      const pending = [...messages, userMessage];
+      setMessages(pending);
+      persistChatThread({ messages: pending, suggested });
       setThinking(true);
       try {
-        const res = await api.ask(prompt, history, contextPayload(context));
+        const payload = contextPayload(context) || { screen: 'desktop', screenLabel: 'Notch' };
+        if (image) payload.watchingScreen = true;
+        const res = await api.ask(asked, history, payload, image);
         if (res.applied?.some((a) => a.ok)) {
           loadProjects();
           loadBootstrap();
@@ -74,27 +98,28 @@ export function ChatProvider({ children }) {
         } else if (res.applied?.some((a) => !a.ok)) {
           notify(res.applied.find((a) => !a.ok).error, 'warn');
         }
-        setMessages((m) => [
-          ...m,
-          {
-            role: 'bot',
-            text: res.answer,
-            blocks: res.blocks || [],
-            suggestions: res.suggestions,
-            applied: res.applied || [],
-          },
-        ]);
+        const botMessage = {
+          role: 'bot',
+          text: res.answer,
+          blocks: res.blocks || [],
+          suggestions: res.suggestions,
+          applied: res.applied || [],
+        };
+        const next = [...pending, botMessage];
+        setMessages(next);
+        persistChatThread({ messages: next, suggested: res.suggestions?.length ? res.suggestions : suggested });
         if (res.suggestions?.length) setSuggested(res.suggestions);
       } catch {
-        setMessages((m) => [...m, { role: 'bot', text: 'Nao consegui responder agora.' }]);
+        const next = [...pending, { role: 'bot', text: 'Nao consegui responder agora.' }];
+        setMessages(next);
+        persistChatThread({ messages: next, suggested });
       } finally {
         setThinking(false);
       }
     },
-    [value, thinking, messages, context, loadProjects, loadBootstrap, notify],
+    [value, thinking, messages, suggested, context, loadProjects, loadBootstrap, notify],
   );
 
-  /* abrir o assistente, opcionalmente ja com um texto pronto no input */
   const focusChat = useCallback((prefill) => {
     setOpen(true);
     if (typeof prefill === 'string' && prefill) setValue(prefill);
@@ -105,6 +130,7 @@ export function ChatProvider({ children }) {
     setMessages([]);
     setSuggested(null);
     setValue('');
+    persistChatThread({ messages: [], suggested: null });
   }, []);
 
   useEffect(() => {

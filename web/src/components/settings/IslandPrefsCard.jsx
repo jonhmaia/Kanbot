@@ -20,9 +20,9 @@ export default function IslandPrefsCard() {
     <Card className="grain p-5 sm:p-6">
       <h3 className="card-title">Notch</h3>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-smoke">
-        A pílula flutuante do app nativo. Clique para abrir o painel, arraste para encaixar no topo,
-        nas laterais ou no canto. Esconder tira a notch sem fechar o Kanbot. Com um projeto aberto, a
-        borda segue a cor dele.
+        Trilho acoplado à borda. Nas laterais, Foco e AI ficam empilhados. O chat da Notch pode ver a
+        tela quando você liga Ver tela. Arraste para trocar de lado. Esconder tira a overlay sem
+        fechar o Kanbot. Com um projeto aberto, a borda segue a cor dele.
       </p>
 
       <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-lineSoft bg-white/[0.03] px-3.5 py-2.5">

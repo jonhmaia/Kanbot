@@ -240,6 +240,13 @@ export const IconChat = (p) => (
   </Svg>
 );
 
+export const IconEye = (p) => (
+  <Svg {...p}>
+    <path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="2.6" />
+  </Svg>
+);
+
 export const IconPaperclip = (p) => (
   <Svg {...p}>
     <path d="M20 11.5 12.6 19a4.5 4.5 0 0 1-6.4-6.4l7.6-7.6a3 3 0 0 1 4.3 4.3l-7.5 7.5a1.5 1.5 0 1 1-2.1-2.1l6.9-6.9" />

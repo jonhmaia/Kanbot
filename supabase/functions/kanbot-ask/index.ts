@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 const MODEL = 'deepseek/deepseek-v4-flash';
+const VISION_MODEL = 'google/gemini-2.5-flash';
 const URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const SCHEMA = {
@@ -113,12 +114,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { prompt = '', history = [], catalog = {}, context = null } = await req.json();
+    const { prompt = '', history = [], catalog = {}, context = null, image = null } = await req.json();
+    const userContent = image
+      ? [
+          { type: 'text', text: String(prompt || 'O que voce ve nesta tela?') },
+          { type: 'image_url', image_url: { url: String(image) } },
+        ]
+      : String(prompt);
     const messages = [
       {
         role: 'system',
         content:
-          'Voce e o Kanbot. Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Se o usuario pedir criar projeto, criar tarefa ou editar tarefa, preencha actions. Consultas: actions vazio.\n\nCATALOGO:\n' +
+          'Voce e o Kanbot. Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Se o usuario pedir criar projeto, criar tarefa ou editar tarefa, preencha actions. Consultas: actions vazio. Se houver print do monitor, use a imagem com o catalogo.\n\nCATALOGO:\n' +
           JSON.stringify(catalog) +
           (context
             ? '\n\nCONTEXTO ATUAL DA TELA (o usuario esta olhando isto agora):\n' +
@@ -130,7 +137,7 @@ Deno.serve(async (req) => {
         role: m.role === 'bot' || m.role === 'assistant' ? 'assistant' : 'user',
         content: String(m.text || ''),
       })),
-      { role: 'user', content: String(prompt) },
+      { role: 'user', content: userContent },
     ];
 
     const res = await fetch(URL, {
@@ -142,7 +149,7 @@ Deno.serve(async (req) => {
         'X-Title': 'Kanbot',
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: image ? VISION_MODEL : MODEL,
         temperature: 0.25,
         max_tokens: 2200,
         messages,

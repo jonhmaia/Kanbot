@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useChat } from '../../context/ChatContext';
 import { useFocus } from '../../context/FocusContext';
 import { dragIslandThenSnap, invokeDesktop } from '../../lib/desktop';
 import { phaseMinutes } from '../../lib/focusSession';
-import { IconClose, IconFlame, IconLogo, IconPause, IconPlay } from '../../lib/icons';
+import { IconClose, IconFlame, IconLogo, IconPause, IconPlay, IconSpark } from '../../lib/icons';
 import { isIslandDock, isIslandSide } from '../../lib/islandPrefs';
+import { useScreenWatch } from '../../lib/screenWatch';
+import IslandChat from './IslandChat';
 
 const DRAG_PX = 8;
 
@@ -17,8 +20,42 @@ function splitClock(clock) {
   return { mm, ss };
 }
 
+function Ring({ progress, color, children, live }) {
+  const radius = 14;
+  const circ = 2 * Math.PI * radius;
+  const offset = circ * (1 - Math.min(1, Math.max(0, progress)));
+  return (
+    <span className={'relative grid h-11 w-11 place-items-center ' + (live ? 'island-live' : '')}>
+      <svg className="absolute inset-0 h-11 w-11" viewBox="0 0 36 36" aria-hidden="true">
+        <circle cx="18" cy="18" r={radius} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2.4" />
+        <circle
+          cx="18"
+          cy="18"
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="2.4"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform="rotate(-90 18 18)"
+        />
+      </svg>
+      {children}
+    </span>
+  );
+}
+
+function shellRadius(edge, dock) {
+  if (dock) return 'rounded-full';
+  if (edge === 'left') return 'rounded-l-none rounded-r-[28px]';
+  if (edge === 'right') return 'rounded-r-none rounded-l-[28px]';
+  return 'rounded-t-none rounded-b-[22px]';
+}
+
 export default function IslandApp() {
   const { session } = useApp();
+  const { thinking } = useChat();
   const {
     prefs,
     setIslandPrefs,
@@ -39,7 +76,8 @@ export default function IslandApp() {
     switchTask,
   } = useFocus();
 
-  const [expanded, setExpanded] = useState(false);
+  const [panel, setPanel] = useState(null);
+  const [watching, setWatching] = useState(false);
   const drag = useRef({ live: false, x: 0, y: 0 });
   const skipClickUntil = useRef(0);
   const edgeRef = useRef(prefs.edge);
@@ -48,10 +86,17 @@ export default function IslandApp() {
   const dock = isIslandDock(prefs.edge);
   const { mm, ss } = splitClock(clock);
   const progress = idle ? 0 : Math.min(1, Math.max(0, 1 - remaining / phaseDurationMs(focus)));
+  const watch = useScreenWatch(watching && panel === 'chat');
+  const expanded = Boolean(panel);
+
+  useEffect(() => {
+    if (watch.error) setWatching(false);
+  }, [watch.error]);
 
   useEffect(() => {
     if (prefs.visible === false) {
-      setExpanded(false);
+      setPanel(null);
+      setWatching(false);
       invokeDesktop('hide_island');
       return;
     }
@@ -61,7 +106,7 @@ export default function IslandApp() {
   useEffect(() => {
     if (edgeRef.current !== prefs.edge) {
       edgeRef.current = prefs.edge;
-      setExpanded(false);
+      setPanel(null);
     }
   }, [prefs.edge]);
 
@@ -72,8 +117,18 @@ export default function IslandApp() {
 
   const blocked = () => drag.current.live || Date.now() < skipClickUntil.current;
 
+  const openPanel = (next) => {
+    if (blocked()) return;
+    if (!loggedIn) {
+      invokeDesktop('show_main');
+      return;
+    }
+    setPanel(next);
+  };
+
   const hideIsland = () => {
-    setExpanded(false);
+    setPanel(null);
+    setWatching(false);
     setIslandPrefs({ visible: false });
   };
 
@@ -93,17 +148,8 @@ export default function IslandApp() {
     skipClickUntil.current = Date.now() + 400;
     drag.current.live = false;
     drag.current.x = null;
-    setExpanded(false);
+    setPanel(null);
     if (typeof edge === 'string') setIslandPrefs({ edge });
-  };
-
-  const onCollapsedClick = () => {
-    if (blocked()) return;
-    if (!loggedIn) {
-      invokeDesktop('show_main');
-      return;
-    }
-    setExpanded(true);
   };
 
   const onFocusToggle = (e) => {
@@ -138,88 +184,101 @@ export default function IslandApp() {
       : paused
         ? 'Pausado'
         : 'Foco';
+  const aiStatus = thinking ? '…' : watching ? 'vendo' : 'ok';
 
-  const dragBind = {
-    onPointerDown,
-    onPointerMove,
-  };
-
-  const stopDrag = {
-    onPointerDown: (e) => e.stopPropagation(),
-  };
-
+  const dragBind = { onPointerDown, onPointerMove };
+  const stopDrag = { onPointerDown: (e) => e.stopPropagation() };
+  const radius = shellRadius(prefs.edge, dock);
   const shell = {
     '--island-accent': accent,
     boxShadow: 'inset 0 0 0 1.5px ' + accent,
   };
 
-  const collapsed = !expanded && (
+  const focusCell = (
     <button
       type="button"
-      {...dragBind}
-      onClick={onCollapsedClick}
+      onClick={() => openPanel('focus')}
       className={
-        'island-shell relative overflow-hidden ' +
-        (dock
-          ? 'grid h-full w-full place-items-center rounded-full'
+        dock
+          ? 'hidden'
           : side
-            ? 'flex h-full w-full flex-col items-center justify-center gap-2 rounded-full px-1 py-3'
-            : 'flex h-full w-full items-center gap-2 rounded-full px-3')
+            ? 'flex flex-1 flex-col items-center justify-center gap-1 px-1'
+            : 'flex min-w-0 flex-1 items-center gap-2 px-2'
       }
-      style={shell}
-      aria-label={loggedIn ? 'Abrir notch' : 'Abrir Kanbot'}
+      aria-label="Abrir foco"
     >
-      {dock ? (
-        idle ? (
-          <IconLogo size={28} />
-        ) : (
-          <span className="text-[11px] font-medium tabular-nums" style={{ color: accent }}>
-            {clock}
-          </span>
-        )
-      ) : side ? (
+      {side ? (
         <>
-          <span className={'relative grid place-items-center ' + (running ? 'island-live' : '')}>
+          <Ring progress={idle ? 1 : progress} color={accent} live={running}>
             {idle ? <IconLogo size={16} /> : <i className="h-1.5 w-1.5 rounded-full" style={{ background: accent }} />}
-          </span>
-          {!idle && (
-            <span className="flex flex-col items-center font-medium leading-none tabular-nums" style={{ color: accent }}>
-              <span className="text-[11px]">{mm}</span>
-              <span className="py-0.5 text-[7px] text-white/35">:</span>
-              <span className="text-[11px]">{ss}</span>
-            </span>
-          )}
+          </Ring>
+          <span className="text-[11px] font-medium text-chalk">Foco</span>
+          <span className="text-[10px] tabular-nums text-white/45">{idle ? 'ok' : `${mm}:${ss}`}</span>
         </>
       ) : (
         <>
           <span className={'relative grid place-items-center ' + (running ? 'island-live' : '')}>
-            {idle ? <IconLogo size={18} /> : <i className="h-2 w-2 rounded-full" style={{ background: accent }} />}
+            {idle ? <IconLogo size={16} /> : <i className="h-2 w-2 rounded-full" style={{ background: accent }} />}
           </span>
           {!idle && (
             <span className="text-[13px] font-medium tabular-nums tracking-tight" style={{ color: accent }}>
               {clock}
             </span>
           )}
-          <span className="min-w-0 flex-1 truncate text-left text-[12.5px] font-medium tracking-tight">
-            {title}
-          </span>
+          <span className="min-w-0 flex-1 truncate text-left text-[12px] font-medium">{title}</span>
         </>
-      )}
-      {!idle && !dock && (
-        <i
-          className={'pointer-events-none absolute bg-[var(--island-accent)] ' + (side ? 'bottom-3 top-3 w-0.5 rounded-full' : 'inset-x-4 bottom-1 h-0.5 rounded-full')}
-          style={{
-            opacity: 0.85,
-            transform: side ? `scaleY(${progress})` : `scaleX(${progress})`,
-            transformOrigin: side ? 'top' : 'left',
-          }}
-        />
       )}
     </button>
   );
 
-  const expandedCard = expanded && loggedIn && (
-    <div className="island-shell flex h-full w-full flex-col overflow-hidden rounded-[26px]" style={shell}>
+  const aiCell = (
+    <button
+      type="button"
+      onClick={() => openPanel('chat')}
+      className={
+        dock
+          ? 'grid h-full w-full place-items-center'
+          : side
+            ? 'flex flex-1 flex-col items-center justify-center gap-1 px-1'
+            : 'grid h-9 w-9 shrink-0 place-items-center'
+      }
+      aria-label="Abrir chat"
+    >
+      {dock ? (
+        thinking || watching ? (
+          <span className="text-[11px] font-medium" style={{ color: accent }}>
+            {aiStatus}
+          </span>
+        ) : (
+          <IconLogo size={28} />
+        )
+      ) : side ? (
+        <>
+          <Ring progress={watching || thinking ? 0.72 : 1} color={watching ? '#8FE3B0' : accent} live={thinking}>
+            <IconSpark size={14} />
+          </Ring>
+          <span className="text-[11px] font-medium text-chalk">AI</span>
+          <span className="text-[10px] text-white/45">{aiStatus}</span>
+        </>
+      ) : (
+        <IconSpark size={15} />
+      )}
+    </button>
+  );
+
+  const rail = !expanded && (
+    <div
+      {...dragBind}
+      className={'island-shell flex h-full w-full overflow-hidden ' + radius + (side ? ' flex-col py-2' : ' items-center')}
+      style={shell}
+    >
+      {focusCell}
+      {aiCell}
+    </div>
+  );
+
+  const focusPanel = panel === 'focus' && loggedIn && (
+    <div className={'island-shell flex h-full w-full flex-col overflow-hidden ' + radius} style={shell}>
       <div {...dragBind} className="flex cursor-grab flex-col items-center pt-2 active:cursor-grabbing">
         <i className="h-1 w-10 rounded-full bg-white/20" />
       </div>
@@ -245,7 +304,7 @@ export default function IslandApp() {
           <button
             type="button"
             {...stopDrag}
-            onClick={() => setExpanded(false)}
+            onClick={() => setPanel(null)}
             className="grid h-9 w-9 place-items-center rounded-full text-dust hover:bg-white/[0.06] hover:text-chalk"
             aria-label="Recolher"
           >
@@ -312,10 +371,27 @@ export default function IslandApp() {
     </div>
   );
 
+  const chatPanel = panel === 'chat' && loggedIn && (
+    <div className={'island-shell flex h-full w-full flex-col overflow-hidden ' + radius} style={shell}>
+      <div {...dragBind} className="flex cursor-grab flex-col items-center pt-2 active:cursor-grabbing">
+        <i className="h-1 w-10 rounded-full bg-white/20" />
+      </div>
+      <IslandChat
+        watching={watching}
+        setWatching={setWatching}
+        frame={watch.frame}
+        watchError={watch.error}
+        onClose={() => setPanel(null)}
+        accent={accent}
+      />
+    </div>
+  );
+
   return (
     <div className="island-root flex h-full w-full select-none">
-      {collapsed}
-      {expandedCard}
+      {rail}
+      {focusPanel}
+      {chatPanel}
     </div>
   );
 }

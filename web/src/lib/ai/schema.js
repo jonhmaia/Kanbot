@@ -1,4 +1,5 @@
 export const OPENROUTER_MODEL = 'deepseek/deepseek-v4-flash';
+export const OPENROUTER_VISION_MODEL = 'google/gemini-2.5-flash';
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const BLOCK_TYPES = [
@@ -155,6 +156,7 @@ export function buildSystemPrompt() {
     '- Nao invente UUID. Consultas (resumo, quem, prazos) devem ter actions: [].',
     '',
     'CONTEXTO DE TELA: quando vier um bloco CONTEXTO ATUAL DA TELA, ele manda na desambiguacao.',
+    'Se o usuario anexar um print do monitor, use a imagem com o catalogo. Nao invente texto ilegivel.',
     '- "esta tarefa", "essa tarefa", "isso" = openTask do contexto. Use o id dela em update_task.',
     '- "este projeto", "aqui", "nesta tela" = projectId do contexto; use-o ao criar tarefa sem projeto citado.',
     '- Comece pelo que esta na tela antes de trazer o resto do workspace.',

@@ -16,6 +16,7 @@ export const SURFACE_LABEL = {
   focus: 'Foco',
   profile: 'Perfil',
   invite: 'Convite',
+  desktop: 'Notch',
   app: 'Kanbot',
 };
 
@@ -40,6 +41,7 @@ export function routeContext(pathname = '', { projects = [] } = {}) {
   if (pathname.startsWith('/me') || pathname.startsWith('/u/'))
     return { surface: 'profile', scope: MASTER_SCOPE, isMaster: true };
   if (pathname.startsWith('/invite')) return { surface: 'invite', scope: MASTER_SCOPE, isMaster: true };
+  if (pathname.startsWith('/desktop')) return { surface: 'desktop', scope: MASTER_SCOPE, isMaster: true };
   return { surface: 'app', scope: MASTER_SCOPE, isMaster: true };
 }
 
@@ -91,6 +93,8 @@ export function contextChips(ctx = {}) {
       return ['Qual projeto esta em risco?', 'Compare o progresso dos projetos', 'Cria um projeto novo', 'Resumo geral'];
     case 'focus':
       return ['O que focar agora?', 'Monte um plano de foco', 'Minhas tarefas urgentes', 'Como foi minha semana?'];
+    case 'desktop':
+      return ['O que voce ve na tela?', 'Cria uma tarefa do que estou vendo', 'Resumo do que esta aberto', 'O que focar agora?'];
     default:
       return ['Resumo do sprint', 'Quem esta sobrecarregado?', 'Mostrar bloqueios', 'O que vence hoje?'];
   }
@@ -170,6 +174,11 @@ export function describeContext(context) {
     );
   } else {
     lines.push('O usuario esta na visao master (todos os projetos).');
+  }
+  if (context.watchingScreen) {
+    lines.push(
+      'O usuario anexou um print ao vivo do monitor. Use a imagem para entender o que esta na tela, inclusive fora do Kanbot.',
+    );
   }
   if (context.focusSession?.taskId) {
     lines.push(

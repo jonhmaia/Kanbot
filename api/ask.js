@@ -19,6 +19,7 @@ export default async function handler(req, res) {
       history: body.history || [],
       catalog: body.catalog || {},
       context: body.context || null,
+      image: body.image || null,
     });
     res.status(200).json({ content });
   } catch (error) {

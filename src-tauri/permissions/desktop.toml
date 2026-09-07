@@ -11,5 +11,6 @@ commands.allow = [
   "resize_island",
   "start_drag_island",
   "snap_island",
-  "open_chat"
+  "open_chat",
+  "capture_screen"
 ]
