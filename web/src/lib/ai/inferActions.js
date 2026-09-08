@@ -4,6 +4,11 @@ const MUTATION_RE =
   /\b(cria(?:r|e)?|adicion(?:a|e|ar)?|add|nova tarefa|novo card|edita(?:r)?|renomeia(?:r)?|atualiza(?:r)?|altera(?:r)?|muda(?:r)?|move(?:r)?|mova|passa(?:r)?|exclui(?:r)?|apaga(?:r)?|deleta(?:r)?|remove(?:r)?|create|update|edit|rename|delete)\b/;
 
 const CREATE_RE = /\b(cria(?:r|e)?|adicion(?:a|e|ar)?|add|nova tarefa|novo card|create)\b/;
+const CREATE_PROJECT_RE =
+  /\b(cria(?:r|e)?|adicion(?:a|e|ar)?|novo)\s+(?:um\s+)?(?:novo\s+)?(projeto|produto|product)\b/;
+const CREATE_BOARD_RE = /\b(cria(?:r|e)?|adicion(?:a|e|ar)?)\s+(?:um\s+)?(?:novo\s+)?board\b/;
+const CREATE_SPRINT_RE =
+  /\b(cria(?:r|e)?|adicion(?:a|e|ar)?|abre|abrir)\s+(?:um\s+)?(?:novo\s+)?sprint\b/;
 const DELETE_RE = /\b(exclui(?:r)?|apaga(?:r)?|deleta(?:r)?|remove(?:r)?|delete)\b/;
 const MOVE_RE = /\b(move(?:r)?|mova|passa(?:r)?|joga|manda|coloca|coloque)\b/;
 const EDIT_RE = /\b(edita(?:r)?|renomeia(?:r)?|atualiza(?:r)?|altera(?:r)?|muda(?:r)?)\b/;
@@ -174,6 +179,23 @@ function resolveTask(prompt, catalog, context) {
   return null;
 }
 
+function extractNamedAfter(prompt, kind) {
+  const quoted = extractQuoted(prompt);
+  if (quoted) return quoted;
+  const named = asString(prompt).match(/(?:chamad[oa]|nome)\s*[:\s]+["“”']?([^"'“”'\n]{2,80})/i);
+  if (named) return stripTail(named[1]);
+  const m = asString(prompt).match(
+    new RegExp(
+      '(?:cria(?:r|e)?|adicion(?:e|a|ar)|novo)\\s+(?:um\\s+)?(?:novo\\s+)?' +
+        kind +
+        '(?:\\s+novo)?(?:\\s+(?:chamad[oa]|com(?: o)? nome))?(?:\\s+(?:do|da|de|para))?\\s*[:\\-]?\\s*(.+)',
+      'i',
+    ),
+  );
+  if (!m) return '';
+  return stripTail(m[1]).replace(/^(?:novo|nova)\s+/i, '');
+}
+
 function extractCreateTitle(prompt) {
   const quoted = extractQuoted(prompt);
   if (quoted) return quoted;
@@ -207,13 +229,47 @@ export function inferActions(prompt, { catalog = {}, context = null } = {}) {
   const boardId = asString(context?.boardId);
   const sprintId = asString(context?.sprintId);
 
-  if (DELETE_RE.test(q)) {
+  if (DELETE_RE.test(q) && !CREATE_PROJECT_RE.test(q)) {
     const task = resolveTask(prompt, catalog, context);
     if (!task) return [];
     return [blank({ op: 'delete_task', id: task.id, title: task.title })];
   }
 
-  if (CREATE_RE.test(q) && !/\b(cria(?:r|e)?|adicion(?:a|e|ar)?)\s+(?:um|uma|o|a)?\s*(projeto|board|sprint|coluna)\b/.test(q)) {
+  if (CREATE_PROJECT_RE.test(q)) {
+    const name = extractNamedAfter(prompt, '(?:projeto|produto|product)') || 'Novo projeto';
+    return [blank({ op: 'create_project', name, title: name })];
+  }
+
+  if (CREATE_BOARD_RE.test(q)) {
+    const name = extractNamedAfter(prompt, 'board') || 'Novo board';
+    const kind = /\bdinamico|dynamic\b/.test(q) ? 'dynamic' : 'normal';
+    const frequencyDays = asString(prompt).match(/(\d+)\s*dias?/)?.[1] || '';
+    return [
+      blank({
+        op: 'create_board',
+        name,
+        title: name,
+        projectId: project?.id || project?.key || asString(context?.projectId),
+        kind,
+        frequencyDays,
+      }),
+    ];
+  }
+
+  if (CREATE_SPRINT_RE.test(q)) {
+    const name = extractNamedAfter(prompt, 'sprint');
+    return [
+      blank({
+        op: 'create_sprint',
+        name,
+        title: name,
+        boardId,
+        projectId: project?.id || project?.key || asString(context?.projectId),
+      }),
+    ];
+  }
+
+  if (CREATE_RE.test(q) && !/\b(cria(?:r|e)?|adicion(?:a|e|ar)?)\s+(?:um|uma|o|a)?\s*(projeto|produto|board|sprint|coluna)\b/.test(q)) {
     const title = extractCreateTitle(prompt) || 'Nova tarefa';
     return [
       blank({

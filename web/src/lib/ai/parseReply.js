@@ -299,7 +299,10 @@ function liveIndex(live = {}) {
 export function parseAssistantReply(raw, { catalog, live } = {}) {
   const parsed = extractJson(raw);
   const answerFromText = typeof raw === 'string' && !parsed ? stripBom(raw).trim() : '';
-  const answer = asString(parsed?.answer || parsed?.text || parsed?.message || answerFromText) || 'Nao consegui montar uma resposta estruturada.';
+  const actions = parseActions(parsed);
+  const answer =
+    asString(parsed?.answer || parsed?.text || parsed?.message || answerFromText) ||
+    (actions.length ? 'Vou aplicar isso agora.' : 'Nao consegui montar uma resposta estruturada.');
 
   const sourceBlocks = parsed
     ? [...asArray(parsed.blocks), ...collectLegacyBlocks(parsed)]
@@ -334,7 +337,7 @@ export function parseAssistantReply(raw, { catalog, live } = {}) {
       ? suggestions
       : ['Resumo do sprint', 'Cria uma tarefa no SFR', 'Quem esta sobrecarregado?'],
     blocks,
-    actions: parseActions(parsed),
+    actions,
     model: parsed ? 'structured' : 'text',
   };
 }
@@ -409,6 +412,16 @@ export function parseActions(parsed) {
     })
     .filter(Boolean)
     .slice(0, 12);
+}
+
+export function isBlankAssistantAnswer(answer) {
+  const s = fold(answer);
+  return (
+    !s ||
+    s.includes('nao consegui montar uma resposta estruturada') ||
+    s === 'vou aplicar isso agora.' ||
+    s === 'vou aplicar no board.'
+  );
 }
 
 export function heuristicReply(prompt, { catalog, live } = {}) {

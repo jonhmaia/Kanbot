@@ -1,4 +1,4 @@
-import { asString, fold, matchByName } from './parseReply';
+import { asString, fold, matchByName, isBlankAssistantAnswer } from './parseReply';
 
 const ICONS = new Set(['sparkle', 'pulse', 'device', 'shield', 'layers', 'target']);
 const PRIORITY = {
@@ -385,9 +385,15 @@ export function mergeActionBlocks(reply, results) {
   if (created.length) extra.push({ id: 'act-c', type: 'tasks', title: 'Tarefa criada', items: created });
   if (updated.length) extra.push({ id: 'act-u', type: 'tasks', title: 'Tarefa atualizada', items: updated });
 
-  const answer = failed.length
-    ? (reply.answer || '') + (reply.answer ? ' ' : '') + failed.map((f) => f.error).join(' ')
-    : reply.answer;
+  const okLabels = results.filter((r) => r.ok).map((r) => r.label).filter(Boolean);
+  const useless = isBlankAssistantAnswer(reply.answer);
+  let answer = reply.answer;
+  if (failed.length) {
+    const errors = failed.map((f) => f.error).join(' ');
+    answer = useless || !reply.answer ? errors : reply.answer + ' ' + errors;
+  } else if (useless && okLabels.length) {
+    answer = okLabels.join(' · ') + '.';
+  }
 
   return { ...reply, answer, blocks: [...extra, ...(reply.blocks || [])], applied: results };
 }

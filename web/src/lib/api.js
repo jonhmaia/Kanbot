@@ -1094,7 +1094,7 @@ export const api = {
         reply = {
           ...reply,
           actions: inferred,
-          answer: parsed ? reply.answer : 'Vou aplicar no board.',
+          answer: 'Vou aplicar isso agora.',
         };
       }
     }
