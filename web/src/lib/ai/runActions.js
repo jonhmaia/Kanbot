@@ -79,20 +79,35 @@ function resolveProject(action, ctx, context) {
   return (
     pick(ctx.projects, action.projectId, ['name', 'key']) ||
     pick(ctx.projects, context?.projectId, ['name', 'key']) ||
+    pick(ctx.projects, context?.threadProjectId, ['name', 'key']) ||
+    pick(ctx.projects, context?.threadProjectName, ['name', 'key']) ||
+    pick(ctx.projects, context?.threadProjectKey, ['name', 'key']) ||
     (ctx.projects.length === 1 ? ctx.projects[0] : null)
   );
 }
 
 function resolveBoard(action, ctx, project, context, task) {
   const list = (ctx.boards || []).filter((b) => !project || b.projectId === project.id);
+  const fromContext = pick(ctx.boards || [], context?.boardId, ['name', 'id']);
+  const contextFits = fromContext && (!project || fromContext.projectId === project.id);
   return (
     pick(list, action.boardId, ['name', 'id']) ||
     pick(list, task?.boardId, ['name', 'id']) ||
-    pick(ctx.boards || [], context?.boardId, ['name', 'id']) ||
+    (contextFits ? fromContext : null) ||
     list.find((b) => b.isDefault) ||
     list[0] ||
     null
   );
+}
+
+function resolveSprint(action, ctx, project, context) {
+  const fromAction = pick(ctx.sprints, action.sprintId, ['name']);
+  if (fromAction) return fromAction;
+  const fromScreen = pick(ctx.sprints, context?.sprintId, ['name']);
+  if (!fromScreen) return null;
+  const board = ctx.boards.find((b) => b.id === fromScreen.boardId);
+  if (project && board && board.projectId !== project.id) return null;
+  return fromScreen;
 }
 
 const THIS_TASK = /^(esta|essa|a|the|this)\s+(tarefa|task|card)$|^(isto|isso|aqui)$/;
@@ -274,7 +289,7 @@ export async function applyAskActions(actions, { api, catalog, context = null })
         const column = resolveColumn({ ...action, project, board }, ctx);
         if (!column) throw new Error('Coluna nao encontrada em ' + project.key);
         const assignee = pick(ctx.members, action.assigneeId, ['name', 'email']);
-        const sprint = pick(ctx.sprints, action.sprintId || context?.sprintId, ['name']);
+        const sprint = resolveSprint(action, ctx, project, context);
         const created = await api.createTask({
           title,
           description: action.description,
@@ -287,7 +302,12 @@ export async function applyAskActions(actions, { api, catalog, context = null })
           progress: Number(action.progress) || 0,
           labels: labelsOf(action.labels),
         });
-        const task = created || { id: '', title, projectId: project.id, columnId: column.id };
+        const task = {
+          ...(created || {}),
+          title: created?.title || title,
+          projectId: created?.projectId || project.id,
+          columnId: created?.columnId || column.id,
+        };
         ctx.tasks.push(task);
         results.push({ op: action.op, ok: true, task, label: 'Tarefa ' + (task.title || title) });
         continue;

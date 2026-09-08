@@ -1,6 +1,6 @@
 import { applyAskActions, mergeActionBlocks } from './ai/runActions';
 import { buildCatalog } from './ai/catalog';
-import { inferActions } from './ai/inferActions';
+import { inferActions, repairActions } from './ai/inferActions';
 import { heuristicReply, parseAssistantReply } from './ai/parseReply';
 import { cacheInvalidateWorkspace } from './cache';
 import { coverageSeries, forecastSeries } from './dashboardExtras';
@@ -1088,16 +1088,16 @@ export const api = {
 
     const parsed = await askModel(prompt, history, catalog, context, image);
     let reply = parsed ? parseAssistantReply(parsed, { catalog, live }) : heuristicReply(prompt, { catalog, live });
-    if (!reply.actions?.length) {
-      const inferred = inferActions(prompt, { catalog, context });
+    const inferOpts = { prompt, catalog, context, history };
+    let actions = repairActions(reply.actions || [], inferOpts);
+    if (!actions.length) {
+      const inferred = inferActions(prompt, inferOpts);
       if (inferred.length) {
-        reply = {
-          ...reply,
-          actions: inferred,
-          answer: 'Vou aplicar isso agora.',
-        };
+        actions = inferred;
+        reply = { ...reply, answer: 'Vou aplicar isso agora.' };
       }
     }
+    if (actions.length) reply = { ...reply, actions };
     if (reply.actions?.length) {
       const applied = await applyAskActions(reply.actions, { api, catalog, context });
       if (applied.some((a) => a.ok)) cacheInvalidateWorkspace();

@@ -42,7 +42,7 @@ export async function callOpenRouter({
         JSON.stringify(catalog) +
         (context ? '\n\n' + describeContext(context) : ''),
     },
-    ...history.slice(-8).map((m) => ({
+    ...history.slice(-16).map((m) => ({
       role: m.role === 'bot' || m.role === 'assistant' ? 'assistant' : 'user',
       content: typeof m.text === 'string' ? m.text : String(m.content || ''),
     })),

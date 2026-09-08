@@ -113,6 +113,11 @@ export function contextPayload(ctx = {}) {
     payload.projectName = ctx.projectName || null;
     payload.projectKey = ctx.projectKey || null;
   }
+  if (ctx.threadProjectId) {
+    payload.threadProjectId = ctx.threadProjectId;
+    payload.threadProjectName = ctx.threadProjectName || null;
+    payload.threadProjectKey = ctx.threadProjectKey || null;
+  }
   if (ctx.boardId) {
     payload.boardId = ctx.boardId;
     payload.boardName = ctx.boardName || null;
@@ -175,15 +180,27 @@ export function describeContext(context) {
   }
   if (context.projectId) {
     lines.push(
-      'Projeto em foco: ' +
+      'Projeto da TELA: ' +
         (context.projectName || context.projectKey || context.projectId) +
         ' (id ' +
         context.projectId +
-        '). Use-o como projectId padrao quando o usuario nao citar outro projeto.',
+        '). Use-o quando o usuario nao citar outro e nao disser "nele".',
     );
   } else {
     lines.push('O usuario esta na visao master (todos os projetos).');
   }
+  if (context.threadProjectId) {
+    lines.push(
+      'Projeto da CONVERSA (ultima criacao/mencao): ' +
+        (context.threadProjectName || context.threadProjectKey || context.threadProjectId) +
+        ' (id ' +
+        context.threadProjectId +
+        '). "nele", "nela", "nesse", "neste projeto", "esse produto" = ESTE, mesmo se a tela for outro produto.',
+    );
+  }
+  lines.push(
+    'Se o usuario listar varias tarefas (virgulas, "e", ponto-e-virgula), crie UMA create_task por item com o titulo de cada item. Nunca deixe title vazio.',
+  );
   if (context.boardId) {
     lines.push(
       'Board em foco: ' +

@@ -12,6 +12,8 @@ const CREATE_SPRINT_RE =
 const DELETE_RE = /\b(exclui(?:r)?|apaga(?:r)?|deleta(?:r)?|remove(?:r)?|delete)\b/;
 const MOVE_RE = /\b(move(?:r)?|mova|passa(?:r)?|joga|manda|coloca|coloque)\b/;
 const EDIT_RE = /\b(edita(?:r)?|renomeia(?:r)?|atualiza(?:r)?|altera(?:r)?|muda(?:r)?)\b/;
+const HERE_RE =
+  /\b(nele|nela|neste|nesse|nessa|nisto|nisso|aqui|este projeto|esse projeto|este produto|esse produto|neste projeto|nesse projeto)\b/;
 
 const STATUS = {
   backlog: 'backlog',
@@ -94,6 +96,97 @@ function pickProject(catalog, query) {
   return matchByName(list, q, ['name', 'key']);
 }
 
+function includesToken(hay, needle) {
+  const n = fold(needle);
+  if (!n) return false;
+  if (n.length <= 3) {
+    const esc = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)').test(hay);
+  }
+  return hay.includes(n);
+}
+
+/** Projeto citado no texto (nome/key), sem cair na tela atual. */
+export function matchProjectInText(text, catalog) {
+  const projects = catalog?.projects || [];
+  const q = fold(text);
+  if (!q) return null;
+  const hits = [];
+  for (const project of projects) {
+    const name = fold(project.name);
+    const key = fold(project.key);
+    const nameHit = name && name.length >= 4 && q.includes(name);
+    const keyHit = key && includesToken(q, key);
+    if (nameHit || keyHit) hits.push(project);
+  }
+  if (!hits.length) {
+    for (const project of projects) {
+      const tokens = fold(project.name)
+        .split(/\s+/)
+        .filter((t) => t.length >= 4);
+      if (tokens.length >= 2 && tokens.every((t) => q.includes(t))) hits.push(project);
+    }
+  }
+  hits.sort((a, b) => (b.name || '').length - (a.name || '').length || (b.key || '').length - (a.key || '').length);
+  return hits[0] || null;
+}
+
+function projectFromHistory(history, catalog) {
+  const msgs = [...(history || [])].reverse();
+  for (const msg of msgs) {
+    const applied = Array.isArray(msg.applied) ? msg.applied : [];
+    const created = [...applied].reverse().find((a) => a.ok && a.project)?.project;
+    if (created) {
+      const hit = pickProject(catalog, created.id) || pickProject(catalog, created.name) || created;
+      if (hit) return hit;
+    }
+    const text = asString(msg.text);
+    const labeled = text.match(/projeto\s+([^.]{2,80})/i);
+    if (labeled) {
+      const hit = matchByName(catalog?.projects || [], stripTail(labeled[1]), ['name', 'key']);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+function threadProject(catalog, context) {
+  return (
+    pickProject(catalog, context?.threadProjectId) ||
+    pickProject(catalog, context?.threadProjectName) ||
+    pickProject(catalog, context?.threadProjectKey) ||
+    (context?.threadProjectId
+      ? {
+          id: context.threadProjectId,
+          key: context.threadProjectKey,
+          name: context.threadProjectName,
+        }
+      : null)
+  );
+}
+
+function screenProject(catalog, context) {
+  return pickProject(catalog, context?.projectId) || (context?.projectId
+    ? { id: context.projectId, key: context.projectKey, name: context.projectName }
+    : null);
+}
+
+/**
+ * 1. nome/key no prompt
+ * 2. "nele/nesse" → projeto da conversa, depois historico, depois tela
+ * 3. tela atual, depois conversa
+ */
+export function resolveDestProject(prompt, catalog, context, history) {
+  const named = matchProjectInText(prompt, catalog);
+  if (named) return named;
+  const here = HERE_RE.test(fold(prompt));
+  const thread = threadProject(catalog, context);
+  const fromHistory = projectFromHistory(history, catalog);
+  const screen = screenProject(catalog, context);
+  if (here) return thread || fromHistory || screen || null;
+  return screen || thread || fromHistory || null;
+}
+
 function extractQuoted(prompt) {
   const m = asString(prompt).match(/["“”']([^"'“”']{1,120})["“”']/);
   return m ? m[1].trim() : '';
@@ -126,26 +219,109 @@ function extractPriority(prompt) {
   return '';
 }
 
-function extractProject(prompt, catalog, context) {
-  const projects = catalog?.projects || [];
-  const q = fold(prompt);
-  let best = null;
-  for (const project of projects) {
-    const key = fold(project.key);
-    const name = fold(project.name);
-    if ((key && q.includes(key)) || (name && q.includes(name))) {
-      if (!best || (project.key || '').length > (best.key || '').length) best = project;
-    }
+function extractProject(prompt, catalog, context, history) {
+  return resolveDestProject(prompt, catalog, context, history);
+}
+
+function cleanTaskTitle(title) {
+  return asString(title)
+    .replace(/^(?:nele|nela|aqui)\s+/i, '')
+    .replace(/^(?:as\s+)?(?:seguintes\s+)?tarefas?\s*(?:de|:)\s+/i, '')
+    .replace(/[.?!]+$/g, '')
+    .trim();
+}
+
+/**
+ * "cria as tarefas de A, B e C" → ["A", "B", "C"].
+ * Nao corta "para ..." no titulo.
+ */
+export function extractTaskList(prompt) {
+  const raw = asString(prompt).trim();
+  if (!raw) return [];
+  const m =
+    raw.match(
+      /(?:cria(?:r|e)?|adicion(?:a|e|ar)?|add)\b[\s\S]*?\btarefas?\s*(?:de|:)\s+(.+)/i,
+    ) || raw.match(/\btarefas?\s*(?:de|:)\s+(.+)/i);
+  if (!m) return [];
+  const body = asString(m[1]).replace(/\s+e\s+(?=[^,;\n]+$)/i, ', ').trim();
+  if (!body) return [];
+  const hasSep = /[,;\n]/.test(body) || /\s+e\s+/i.test(m[1]);
+  if (!hasSep) {
+    const one = cleanTaskTitle(body);
+    return one.length >= 3 ? [one] : [];
   }
-  if (best) return best;
-  if (context?.projectId) {
-    return pickProject(catalog, context.projectId) || {
-      id: context.projectId,
-      key: context.projectKey,
-      name: context.projectName,
-    };
+  return body
+    .split(/[,;\n]+/)
+    .map((s) => cleanTaskTitle(s))
+    .filter((s) => s.length >= 3);
+}
+
+function emptyTitle(action) {
+  const t = asString(action?.title || action?.name).trim();
+  return !t || /^tarefa sem t[ií]tulo$/i.test(t) || /^untitled(\s+task)?$/i.test(t);
+}
+
+function destId(dest, fallback = '') {
+  return dest?.id || dest?.key || asString(fallback);
+}
+
+/**
+ * Completa create_task do modelo: titulos de lista, projeto da conversa/"nele".
+ */
+export function repairActions(actions, { prompt, catalog = {}, context = null, history = [] } = {}) {
+  const next = (actions || []).map((a) => ({ ...a }));
+  const titles = extractTaskList(prompt);
+  const dest = resolveDestProject(prompt, catalog, context, history);
+  const named = matchProjectInText(prompt, catalog);
+  const here = HERE_RE.test(fold(prompt));
+  const creates = next.filter((a) => a.op === 'create_task');
+
+  const stampProject = (action) => {
+    if ((named || here) && dest) action.projectId = destId(dest);
+    else if (!asString(action.projectId).trim() && dest) action.projectId = destId(dest);
+  };
+
+  if (creates.length && titles.length > creates.length && creates.every(emptyTitle)) {
+    const others = next.filter((a) => a.op !== 'create_task');
+    const template = creates[0] || {};
+    return [
+      ...others,
+      ...titles.map((title) =>
+        blank({
+          ...template,
+          op: 'create_task',
+          title,
+          name: '',
+          projectId: destId(dest, template.projectId),
+        }),
+      ),
+    ];
   }
-  return null;
+
+  if (creates.length === 1 && emptyTitle(creates[0]) && titles.length > 1) {
+    const others = next.filter((a) => a.op !== 'create_task');
+    const template = creates[0];
+    return [
+      ...others,
+      ...titles.map((title) =>
+        blank({
+          ...template,
+          op: 'create_task',
+          title,
+          name: '',
+          projectId: destId(dest, template.projectId),
+        }),
+      ),
+    ];
+  }
+
+  creates.forEach((action, i) => {
+    if (emptyTitle(action) && titles[i]) action.title = titles[i];
+    else if (emptyTitle(action) && titles.length === 1) action.title = titles[0];
+    stampProject(action);
+  });
+
+  return next.filter((a) => a.op !== 'create_task' || !emptyTitle(a));
 }
 
 function extractColumn(prompt, catalog, project) {
@@ -220,14 +396,15 @@ function extractRename(prompt) {
  * Quando o modelo devolve actions vazio mas o usuario pediu criar/editar/mover,
  * monta as mutacoes a partir do texto + catalogo + tela.
  */
-export function inferActions(prompt, { catalog = {}, context = null } = {}) {
+export function inferActions(prompt, { catalog = {}, context = null, history = [] } = {}) {
   if (!isMutationPrompt(prompt)) return [];
   const q = fold(prompt);
-  const project = extractProject(prompt, catalog, context);
+  const project = extractProject(prompt, catalog, context, history);
   const statusKey = extractStatus(prompt);
   const column = extractColumn(prompt, catalog, project);
-  const boardId = asString(context?.boardId);
-  const sprintId = asString(context?.sprintId);
+  const screenIsDest = project && asString(context?.projectId) && project.id === context.projectId;
+  const boardId = screenIsDest ? asString(context?.boardId) : '';
+  const sprintId = screenIsDest ? asString(context?.sprintId) : '';
 
   if (DELETE_RE.test(q) && !CREATE_PROJECT_RE.test(q)) {
     const task = resolveTask(prompt, catalog, context);
@@ -270,19 +447,23 @@ export function inferActions(prompt, { catalog = {}, context = null } = {}) {
   }
 
   if (CREATE_RE.test(q) && !/\b(cria(?:r|e)?|adicion(?:a|e|ar)?)\s+(?:um|uma|o|a)?\s*(projeto|produto|board|sprint|coluna)\b/.test(q)) {
-    const title = extractCreateTitle(prompt) || 'Nova tarefa';
-    return [
+    const titles = extractTaskList(prompt);
+    const wantsList = /\btarefas\b/.test(q);
+    if (wantsList && !titles.length) return [];
+    const list = titles.length ? titles : [cleanTaskTitle(extractCreateTitle(prompt)) || 'Nova tarefa'];
+    const projectId = destId(project, asString(context?.threadProjectId) || asString(context?.projectId));
+    return list.map((title) =>
       blank({
         op: 'create_task',
         title,
-        projectId: project?.id || project?.key || asString(context?.projectId),
+        projectId,
         boardId,
         sprintId,
-        columnId: column?.id || '',
+        columnId: screenIsDest ? column?.id || '' : '',
         statusKey,
         priority: extractPriority(prompt),
       }),
-    ];
+    );
   }
 
   if (MOVE_RE.test(q) || statusKey) {

@@ -163,18 +163,18 @@ Deno.serve(async (req) => {
       {
         role: 'system',
         content:
-          'Voce e o Kanbot, copiloto de um kanban multi-produto: cada produto tem varios boards (normal = continuo; dinamico = sprints). Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Actions: create_project, create_task, update_task, delete_task, move_task, create_board, update_board, delete_board, create_sprint, close_sprint. "neste board" = boardId do contexto. Consultas: actions vazio. Se o usuario pediu criar/editar/mover/excluir, actions NAO pode ser vazio. Se houver print do monitor, use a imagem com o catalogo.\n\nCATALOGO:\n' +
+          'Voce e o Kanbot, copiloto de um kanban multi-produto: cada produto tem varios boards (normal = continuo; dinamico = sprints). Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Actions: create_project, create_task, update_task, delete_task, move_task, create_board, update_board, delete_board, create_sprint, close_sprint. Consultas: actions vazio. Se o usuario pediu criar/editar/mover/excluir, actions NAO pode ser vazio. create_task.title nunca vazio. Se o usuario listar tarefas (virgulas, "e"), uma create_task por item. "nele"/"nesse projeto" = threadProjectId do contexto, nao o da tela. Se houver print do monitor, use a imagem com o catalogo.\n\nCATALOGO:\n' +
           JSON.stringify(catalog) +
           (context
             ? '\n\nCONTEXTO ATUAL DA TELA (o usuario esta olhando isto agora):\n' +
               JSON.stringify(context) +
-              '\n"esta tarefa"/"isso" = openTask. "este projeto"/"aqui" = projectId. "neste board" = boardId do contexto.'
+              '\n"esta tarefa"/"isso" = openTask. "este projeto"/"aqui" = projectId da TELA. "nele"/"nesse" = threadProjectId se existir. Listas de tarefas: uma action por titulo.'
             : '') +
           (mutation
             ? '\n\nO usuario PEDIU uma mutacao real. Preencha actions com pelo menos 1 item. Campos nao usados: string vazia.'
             : ''),
       },
-      ...history.slice(-8).map((m: { role?: string; text?: string }) => ({
+      ...history.slice(-16).map((m: { role?: string; text?: string }) => ({
         role: m.role === 'bot' || m.role === 'assistant' ? 'assistant' : 'user',
         content: String(m.text || ''),
       })),
