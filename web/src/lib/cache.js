@@ -1,5 +1,6 @@
 const PREFIX = 'kanbot:';
 const memory = new Map();
+export const WORKSPACE_EVENT = 'kanbot-workspace';
 
 export function cacheGet(key) {
   if (memory.has(key)) return memory.get(key);
@@ -37,6 +38,20 @@ export function cacheRemovePrefix(prefix) {
   }
 }
 
+function emitWorkspace() {
+  try {
+    window.dispatchEvent(new CustomEvent(WORKSPACE_EVENT));
+  } catch {
+    /* ssr / tests */
+  }
+}
+
+export function subscribeWorkspace(handler) {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(WORKSPACE_EVENT, handler);
+  return () => window.removeEventListener(WORKSPACE_EVENT, handler);
+}
+
 export function cacheInvalidateWorkspace() {
   cacheRemovePrefix('dashboard');
   cacheRemovePrefix('tasks');
@@ -44,6 +59,7 @@ export function cacheInvalidateWorkspace() {
   cacheRemovePrefix('board:');
   cacheRemovePrefix('boards:');
   cacheRemovePrefix('all-columns');
+  emitWorkspace();
 }
 
 export function cacheClear() {

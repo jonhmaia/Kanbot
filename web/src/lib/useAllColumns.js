@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
-import { cacheGet, cacheSet } from './cache';
+import { cacheGet, cacheSet, subscribeWorkspace } from './cache';
 
 /**
  * Junta as colunas de todos os projetos em uma lista unica
@@ -33,6 +33,9 @@ export default function useAllColumns() {
 
   useEffect(() => {
     load().catch(() => {});
+    return subscribeWorkspace(() => {
+      load().catch(() => {});
+    });
   }, [load]);
 
   return { columns, ready, load };

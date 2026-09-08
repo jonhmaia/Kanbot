@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { cacheGet, cacheSet } from './cache';
+import { cacheGet, cacheSet, subscribeWorkspace } from './cache';
 
 /** Le o cache na hora e revalida em silencio — a tela nao volta para skeleton. */
 export function useCached(key, fetcher) {
@@ -47,6 +47,12 @@ export function useCached(key, fetcher) {
       alive = false;
     };
   }, [key, fetcher]);
+
+  useEffect(() => {
+    return subscribeWorkspace(() => {
+      reload().catch(() => {});
+    });
+  }, [reload]);
 
   return [data, setData, reload, error];
 }

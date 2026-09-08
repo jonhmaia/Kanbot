@@ -9,6 +9,7 @@ function compactTask(t) {
     project: t.projectKey || t.projectName,
     boardId: t.boardId || null,
     board: t.boardName || null,
+    columnId: t.columnId || null,
     sprintId: t.sprintId || null,
     sprint: t.sprintName || null,
     assigneeId: t.assigneeId,

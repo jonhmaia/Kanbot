@@ -176,6 +176,7 @@ export function buildSystemPrompt() {
     '- Campos nao usados: string vazia, array vazio, chartType "none".',
     '',
     'MUTACOES (actions): o sistema executa de verdade. So preencha actions se o usuario pediu criar/editar/excluir/mover.',
+    '- Se o usuario pediu criar, editar, mover ou excluir, actions NAO pode ser []. Nao diga que fez se o array estiver vazio.',
     '- create_project: name obrigatorio. key com 3 letras. description/color/icon opcionais.',
     '- create_task: title obrigatorio + projectId. boardId (id ou nome) ou o board da tela. columnId ou statusKey.',
     '- update_task: id = UUID ou titulo. So preencha campos que mudam.',

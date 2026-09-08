@@ -1,5 +1,6 @@
 import { applyAskActions, mergeActionBlocks } from './ai/runActions';
 import { buildCatalog } from './ai/catalog';
+import { inferActions } from './ai/inferActions';
 import { heuristicReply, parseAssistantReply } from './ai/parseReply';
 import { cacheInvalidateWorkspace } from './cache';
 import { coverageSeries, forecastSeries } from './dashboardExtras';
@@ -145,6 +146,14 @@ async function decorateTasks(rows, members) {
     .slice()
     .sort((a, b) => Number(a.position) - Number(b.position))
     .map((row) => mapTask(row, index, checklists[row.id] || []));
+}
+
+async function decorateTaskOrRow(id, projectId, fallbackRow, members) {
+  const rows = (await fetchExpandedTasks({ projectId })).filter((t) => t.id === id);
+  const decorated = (await decorateTasks(rows, members))[0];
+  if (decorated) return decorated;
+  if (fallbackRow) return mapTask(fallbackRow, membersById(members || []));
+  return { id, title: fallbackRow?.title || 'Tarefa' };
 }
 
 async function fetchExpandedTasks(filter = {}) {
@@ -761,8 +770,7 @@ export const api = {
     }
     await logActivity(ws, data.project_id, 'created', data.title);
     const members = await loadProjectMembers(data.project_id);
-    const rows = (await fetchExpandedTasks({ projectId: data.project_id })).filter((t) => t.id === data.id);
-    return (await decorateTasks(rows, members))[0];
+    return decorateTaskOrRow(data.id, data.project_id, data, members);
   },
 
   updateTask: async (id, patch) => {
@@ -791,8 +799,7 @@ export const api = {
     const ws = current.projects?.workspace_id || (await workspaceId());
     if (patch.labels) await syncTaskLabels(id, ws, patch.labels);
     const members = await loadProjectMembers(current.project_id);
-    const rows = await fetchExpandedTasks({ projectId: current.project_id });
-    return (await decorateTasks(rows.filter((t) => t.id === id), members))[0];
+    return decorateTaskOrRow(id, current.project_id, { ...current, ...body, id }, members);
   },
 
   deleteTask: async (id) => {
@@ -811,8 +818,7 @@ export const api = {
     });
     fail(error);
     const members = await loadProjectMembers(data.project_id);
-    const rows = await fetchExpandedTasks({ projectId: data.project_id });
-    return (await decorateTasks(rows.filter((t) => t.id === id), members))[0];
+    return decorateTaskOrRow(id, data.project_id, data, members);
   },
 
   masterBoard: async (filter = {}) => {
@@ -1082,9 +1088,19 @@ export const api = {
 
     const parsed = await askModel(prompt, history, catalog, context, image);
     let reply = parsed ? parseAssistantReply(parsed, { catalog, live }) : heuristicReply(prompt, { catalog, live });
+    if (!reply.actions?.length) {
+      const inferred = inferActions(prompt, { catalog, context });
+      if (inferred.length) {
+        reply = {
+          ...reply,
+          actions: inferred,
+          answer: parsed ? reply.answer : 'Vou aplicar no board.',
+        };
+      }
+    }
     if (reply.actions?.length) {
       const applied = await applyAskActions(reply.actions, { api, catalog, context });
-      if (applied.length) cacheInvalidateWorkspace();
+      if (applied.some((a) => a.ok)) cacheInvalidateWorkspace();
       reply = mergeActionBlocks(reply, applied);
     }
     return reply;

@@ -13,8 +13,7 @@ export default function TaskCard({
   task,
   showProject = false,
   onOpen,
-  onDragStart,
-  onDragEnd,
+  onPointerDown,
   dragging,
   staticCard = false,
   selected = false,
@@ -26,14 +25,9 @@ export default function TaskCard({
 
   return (
     <article
-      draggable={!staticCard}
-      onDragStart={(e) => {
-        if (staticCard) return;
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', task.id);
-        onDragStart?.(task);
-      }}
-      onDragEnd={staticCard ? undefined : onDragEnd}
+      draggable={false}
+      onDragStart={(e) => e.preventDefault()}
+      onPointerDown={staticCard ? undefined : onPointerDown}
       onClick={(e) => {
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
@@ -43,10 +37,12 @@ export default function TaskCard({
         onOpen?.(task);
       }}
       className={
-        'group cursor-pointer select-none rounded-3xl border bg-white/[0.045] p-3.5 backdrop-blur-md transition-all duration-200 hover:border-white/20 hover:bg-white/[0.075] ' +
+        'group select-none rounded-3xl border bg-white/[0.045] p-3.5 backdrop-blur-md transition-all duration-200 hover:border-white/20 hover:bg-white/[0.075] ' +
+        (staticCard ? 'cursor-pointer ' : dragging ? 'cursor-grabbing ' : 'cursor-grab ') +
         (dragging ? 'opacity-35 ' : 'opacity-100 ') +
         (selected ? 'border-amber/50 bg-amber/[0.07]' : 'border-lineSoft')
       }
+      style={staticCard ? undefined : { touchAction: 'none' }}
     >
       <div className="flex items-start gap-2">
         <i className={'mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ' + priority.dot} title={priority.label} />

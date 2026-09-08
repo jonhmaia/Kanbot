@@ -132,6 +132,16 @@ const SCHEMA = {
   },
 };
 
+function isMutation(prompt: string) {
+  const q = String(prompt)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return /\b(cria(?:r|e)?|adicion(?:a|e|ar)?|nova tarefa|novo card|edita(?:r)?|renomeia(?:r)?|atualiza(?:r)?|altera(?:r)?|muda(?:r)?|move(?:r)?|mova|passa(?:r)?|exclui(?:r)?|apaga(?:r)?|deleta(?:r)?|remove(?:r)?)\b/.test(
+    q,
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors() });
 
@@ -142,6 +152,7 @@ Deno.serve(async (req) => {
 
   try {
     const { prompt = '', history = [], catalog = {}, context = null, image = null } = await req.json();
+    const mutation = isMutation(String(prompt));
     const userContent = image
       ? [
           { type: 'text', text: String(prompt || 'O que voce ve nesta tela?') },
@@ -152,12 +163,15 @@ Deno.serve(async (req) => {
       {
         role: 'system',
         content:
-          'Voce e o Kanbot, copiloto de um kanban multi-produto: cada produto tem varios boards (normal = continuo; dinamico = sprints). Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Actions: create_project, create_task, update_task, delete_task, move_task, create_board, update_board, delete_board, create_sprint, close_sprint. "neste board" = boardId do contexto. Consultas: actions vazio. Se houver print do monitor, use a imagem com o catalogo.\n\nCATALOGO:\n' +
+          'Voce e o Kanbot, copiloto de um kanban multi-produto: cada produto tem varios boards (normal = continuo; dinamico = sprints). Responda so com JSON kanbot_reply. Use IDs reais do catalogo. Portugues, direto. Actions: create_project, create_task, update_task, delete_task, move_task, create_board, update_board, delete_board, create_sprint, close_sprint. "neste board" = boardId do contexto. Consultas: actions vazio. Se o usuario pediu criar/editar/mover/excluir, actions NAO pode ser vazio. Se houver print do monitor, use a imagem com o catalogo.\n\nCATALOGO:\n' +
           JSON.stringify(catalog) +
           (context
             ? '\n\nCONTEXTO ATUAL DA TELA (o usuario esta olhando isto agora):\n' +
               JSON.stringify(context) +
               '\n"esta tarefa"/"isso" = openTask. "este projeto"/"aqui" = projectId. "neste board" = boardId do contexto.'
+            : '') +
+          (mutation
+            ? '\n\nO usuario PEDIU uma mutacao real. Preencha actions com pelo menos 1 item. Campos nao usados: string vazia.'
             : ''),
       },
       ...history.slice(-8).map((m: { role?: string; text?: string }) => ({
@@ -167,29 +181,37 @@ Deno.serve(async (req) => {
       { role: 'user', content: userContent },
     ];
 
-    const res = await fetch(URL, {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + apiKey,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://kanbot.local',
-        'X-Title': 'Kanbot',
-      },
-      body: JSON.stringify({
-        model: image ? VISION_MODEL : MODEL,
-        temperature: 0.25,
-        max_tokens: 2200,
-        messages,
-        response_format: {
-          type: 'json_schema',
-          json_schema: { name: 'kanbot_reply', strict: true, schema: SCHEMA },
-        },
-      }),
-    });
+    const headers = {
+      Authorization: 'Bearer ' + apiKey,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://kanbot.local',
+      'X-Title': 'Kanbot',
+    };
+    const bodyBase = {
+      model: image ? VISION_MODEL : MODEL,
+      temperature: 0.25,
+      max_tokens: 2200,
+      messages,
+    };
+    const schemaFormat = {
+      type: 'json_schema',
+      json_schema: { name: 'kanbot_reply', strict: true, schema: SCHEMA },
+    };
+    const objectFormat = { type: 'json_object' };
+    const attempts = mutation ? [objectFormat, schemaFormat] : [schemaFormat, objectFormat];
 
-    const data = await res.json();
-    if (!res.ok) return json({ error: data?.error?.message || 'OpenRouter falhou' }, 502);
-    return json({ content: data?.choices?.[0]?.message?.content || '' });
+    let lastError = 'OpenRouter falhou';
+    for (const response_format of attempts) {
+      const res = await fetch(URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ...bodyBase, response_format }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return json({ content: data?.choices?.[0]?.message?.content || '' });
+      lastError = (data as { error?: { message?: string } })?.error?.message || lastError;
+    }
+    return json({ error: lastError }, 502);
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : 'Falha' }, 500);
   }

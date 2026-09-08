@@ -15,16 +15,26 @@ const STATUS = {
   backlog: 'backlog',
   ideas: 'backlog',
   discovery: 'backlog',
+  a_fazer: 'backlog',
+  todo: 'backlog',
   in_progress: 'in_progress',
   progresso: 'in_progress',
+  andamento: 'in_progress',
+  em_andamento: 'in_progress',
+  em_progresso: 'in_progress',
+  fazendo: 'in_progress',
   building: 'in_progress',
   designing: 'in_progress',
   review: 'review',
   revisao: 'review',
+  em_revisao: 'review',
   blocked: 'blocked',
   bloqueado: 'blocked',
   done: 'done',
   concluido: 'done',
+  concluida: 'done',
+  pronto: 'done',
+  pronta: 'done',
 };
 
 function pick(list, query, keys) {
@@ -65,10 +75,19 @@ function resolveColumn(action, ctx) {
   return columns[0] || null;
 }
 
-function resolveBoard(action, ctx, project, context) {
+function resolveProject(action, ctx, context) {
+  return (
+    pick(ctx.projects, action.projectId, ['name', 'key']) ||
+    pick(ctx.projects, context?.projectId, ['name', 'key']) ||
+    (ctx.projects.length === 1 ? ctx.projects[0] : null)
+  );
+}
+
+function resolveBoard(action, ctx, project, context, task) {
   const list = (ctx.boards || []).filter((b) => !project || b.projectId === project.id);
   return (
     pick(list, action.boardId, ['name', 'id']) ||
+    pick(list, task?.boardId, ['name', 'id']) ||
     pick(ctx.boards || [], context?.boardId, ['name', 'id']) ||
     list.find((b) => b.isDefault) ||
     list[0] ||
@@ -141,10 +160,8 @@ export async function applyAskActions(actions, { api, catalog, context = null })
       }
 
       if (action.op === 'create_board') {
-        const project =
-          pick(ctx.projects, action.projectId, ['name', 'key']) ||
-          pick(ctx.projects, context?.projectId, ['name', 'key']);
-        if (!project) throw new Error('Projeto nao encontrado: ' + (action.projectId || '?'));
+        const project = resolveProject(action, ctx, context);
+        if (!project) throw new Error('Diga em qual produto eu crio o board.');
         const kind = fold(action.kind) === 'dynamic' ? 'dynamic' : 'normal';
         const created = await api.createBoard(project.id, {
           name: action.name || action.title || 'Novo board',
@@ -251,16 +268,14 @@ export async function applyAskActions(actions, { api, catalog, context = null })
       if (action.op === 'create_task') {
         const title = action.title || action.name;
         if (!title) throw new Error('Tarefa sem titulo');
-        const project =
-          pick(ctx.projects, action.projectId, ['name', 'key']) ||
-          pick(ctx.projects, context?.projectId, ['name', 'key']);
-        if (!project) throw new Error('Projeto nao encontrado: ' + (action.projectId || '?'));
+        const project = resolveProject(action, ctx, context);
+        if (!project) throw new Error('Diga em qual produto eu crio a tarefa (ex.: a key SFR).');
         const board = resolveBoard(action, ctx, project, context);
         const column = resolveColumn({ ...action, project, board }, ctx);
         if (!column) throw new Error('Coluna nao encontrada em ' + project.key);
         const assignee = pick(ctx.members, action.assigneeId, ['name', 'email']);
         const sprint = pick(ctx.sprints, action.sprintId || context?.sprintId, ['name']);
-        const task = await api.createTask({
+        const created = await api.createTask({
           title,
           description: action.description,
           columnId: column.id,
@@ -272,8 +287,9 @@ export async function applyAskActions(actions, { api, catalog, context = null })
           progress: Number(action.progress) || 0,
           labels: labelsOf(action.labels),
         });
+        const task = created || { id: '', title, projectId: project.id, columnId: column.id };
         ctx.tasks.push(task);
-        results.push({ op: action.op, ok: true, task, label: 'Tarefa ' + task.title });
+        results.push({ op: action.op, ok: true, task, label: 'Tarefa ' + (task.title || title) });
         continue;
       }
 
@@ -292,11 +308,17 @@ export async function applyAskActions(actions, { api, catalog, context = null })
         const project = pick(ctx.projects, action.projectId || current.projectId, ['name', 'key']) || {
           id: current.projectId,
         };
-        const board = resolveBoard(action, ctx, project, context);
+        const board = resolveBoard(action, ctx, project, context, current);
         const column = resolveColumn({ ...action, project, board }, ctx);
+        let task = current;
         if (action.op === 'move_task' || action.columnId || action.statusKey) {
           if (!column) throw new Error('Coluna destino nao encontrada');
-          await api.moveTask(current.id, { columnId: column.id });
+          task =
+            (await api.moveTask(current.id, { columnId: column.id })) || {
+              ...current,
+              columnId: column.id,
+              statusKey: column.statusKey || current.statusKey,
+            };
         }
         const patch = {};
         if (action.op === 'update_task') {
@@ -313,16 +335,15 @@ export async function applyAskActions(actions, { api, catalog, context = null })
           if (action.progress) patch.progress = Number(action.progress);
           if (action.labels) patch.labels = labelsOf(action.labels);
         }
-        const task =
-          action.op === 'update_task' && Object.keys(patch).length
-            ? await api.updateTask(current.id, patch)
-            : await api.updateTask(current.id, {});
-        ctx.tasks = ctx.tasks.map((t) => (t.id === task.id ? task : t));
+        if (Object.keys(patch).length) {
+          task = (await api.updateTask(current.id, patch)) || { ...task, ...patch };
+        }
+        ctx.tasks = ctx.tasks.map((t) => (t.id === current.id ? { ...t, ...task, id: current.id } : t));
         results.push({
           op: action.op,
           ok: true,
           task,
-          label: (action.op === 'move_task' ? 'Moveu ' : 'Editou ') + task.title,
+          label: (action.op === 'move_task' ? 'Moveu ' : 'Editou ') + (task.title || current.title),
         });
       }
     } catch (e) {

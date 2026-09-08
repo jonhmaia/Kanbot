@@ -1,5 +1,6 @@
 import { OPENROUTER_MODEL, OPENROUTER_URL, OPENROUTER_VISION_MODEL, REPLY_JSON_SCHEMA, buildSystemPrompt } from './schema.js';
 import { describeContext } from './context.js';
+import { isMutationPrompt } from './inferActions.js';
 
 function userContent(prompt, image) {
   if (!image) return prompt;
@@ -7,6 +8,15 @@ function userContent(prompt, image) {
     { type: 'text', text: prompt || 'O que voce ve nesta tela?' },
     { type: 'image_url', image_url: { url: image } },
   ];
+}
+
+function formats(mutation) {
+  const schema = {
+    type: 'json_schema',
+    json_schema: { name: 'kanbot_reply', strict: true, schema: REPLY_JSON_SCHEMA },
+  };
+  const object = { type: 'json_object' };
+  return mutation ? [object, schema] : [schema, object];
 }
 
 export async function callOpenRouter({
@@ -19,11 +29,15 @@ export async function callOpenRouter({
 }) {
   if (!apiKey) throw new Error('OPENROUTER_API_KEY ausente');
 
+  const mutation = isMutationPrompt(prompt);
   const messages = [
     {
       role: 'system',
       content:
         buildSystemPrompt() +
+        (mutation
+          ? '\n\nO usuario PEDIU uma mutacao real. Preencha actions com pelo menos 1 item. Nao finja que executou so no answer. Campos nao usados: string vazia.'
+          : '') +
         '\n\nCATALOGO DO WORKSPACE:\n' +
         JSON.stringify(catalog) +
         (context ? '\n\n' + describeContext(context) : ''),
@@ -49,34 +63,16 @@ export async function callOpenRouter({
     max_tokens: 2200,
   };
 
-  let res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      ...bodyBase,
-      response_format: {
-        type: 'json_schema',
-        json_schema: { name: 'kanbot_reply', strict: true, schema: REPLY_JSON_SCHEMA },
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    res = await fetch(OPENROUTER_URL, {
+  let lastError = 'OpenRouter falhou';
+  for (const response_format of formats(mutation)) {
+    const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        ...bodyBase,
-        response_format: { type: 'json_object' },
-      }),
+      body: JSON.stringify({ ...bodyBase, response_format }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) return data?.choices?.[0]?.message?.content || '';
+    lastError = data?.error?.message || data?.message || 'OpenRouter HTTP ' + res.status;
   }
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = data?.error?.message || data?.message || 'OpenRouter HTTP ' + res.status;
-    throw new Error(msg);
-  }
-
-  return data?.choices?.[0]?.message?.content || '';
+  throw new Error(lastError);
 }
