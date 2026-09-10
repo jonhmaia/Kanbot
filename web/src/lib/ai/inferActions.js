@@ -226,34 +226,66 @@ function extractProject(prompt, catalog, context, history) {
 function cleanTaskTitle(title) {
   return asString(title)
     .replace(/^(?:nele|nela|aqui)\s+/i, '')
-    .replace(/^(?:as\s+)?(?:seguintes\s+)?tarefas?\s*(?:de|:)\s+/i, '')
+    .replace(/^(?:as\s+)?(?:seguintes\s+)?tarefas?\s*(?:de|:|,)?\s+/i, '')
+    .replace(/^(?:a tarefa|uma tarefa|um card|a task)\s+/i, '')
     .replace(/[.?!]+$/g, '')
     .trim();
 }
 
+function peelListBody(body) {
+  return asString(body)
+    .trim()
+    .replace(/^(?:nele|nela|aqui|neste|nesse|nessa)\s+/i, '')
+    .replace(/^(?:de|:|,|\-|—)\s*/i, '')
+    .replace(/^(?:no|na|em)\s+(?:projeto|produto)?\s*[\w-]{1,32}\s*(?:de|:|,)?\s*/i, '')
+    .replace(/^(?:de|:|,|\-|—)\s*/i, '')
+    .trim();
+}
+
+function splitTaskItems(body) {
+  let text = peelListBody(body);
+  if (!text) return [];
+  text = text.replace(/(?:^|\s)(?:[-*•]|[\d]+[.)])\s+/g, '\n');
+  const andAsComma = /\s+e\s+(?=[^,;\n]+$)/i.test(text);
+  if (andAsComma) text = text.replace(/\s+e\s+(?=[^,;\n]+$)/i, ', ');
+  const hasSep = /[,;\n]/.test(text);
+  const parts = (hasSep ? text.split(/[,;\n]+/) : [text])
+    .map((s) => cleanTaskTitle(s))
+    .filter((s) => s.length >= 3 && s.length <= 160)
+    .filter((s) => !/^(?:as\s+)?(?:seguintes\s+)?tarefas?$/i.test(s));
+  return parts.slice(0, 20);
+}
+
+const LIST_HEAD =
+  /(?:cria(?:r|e)?|adicion(?:a|e|ar)?|add|nova|novo)\b[\s\S]*?\b(?:as\s+)?(?:seguintes\s+)?(?:tarefas?|cards?|tasks?)\b/i;
+
 /**
- * "cria as tarefas de A, B e C" → ["A", "B", "C"].
+ * "cria as tarefas, A, B e C" / "cria as tarefas de A, B" → ["A", "B", "C"].
  * Nao corta "para ..." no titulo.
  */
 export function extractTaskList(prompt) {
   const raw = asString(prompt).trim();
   if (!raw) return [];
-  const m =
-    raw.match(
-      /(?:cria(?:r|e)?|adicion(?:a|e|ar)?|add)\b[\s\S]*?\btarefas?\s*(?:de|:)\s+(.+)/i,
-    ) || raw.match(/\btarefas?\s*(?:de|:)\s+(.+)/i);
-  if (!m) return [];
-  const body = asString(m[1]).replace(/\s+e\s+(?=[^,;\n]+$)/i, ', ').trim();
-  if (!body) return [];
-  const hasSep = /[,;\n]/.test(body) || /\s+e\s+/i.test(m[1]);
-  if (!hasSep) {
-    const one = cleanTaskTitle(body);
-    return one.length >= 3 ? [one] : [];
+  let body = '';
+  const head = raw.match(LIST_HEAD);
+  if (head) body = raw.slice(head.index + head[0].length);
+  else {
+    const alt = raw.match(/\b(?:tarefas?|cards?|tasks?)\s*(?:de|:|,|\-)\s+(.+)/i);
+    if (alt) body = alt[1];
   }
-  return body
-    .split(/[,;\n]+/)
-    .map((s) => cleanTaskTitle(s))
-    .filter((s) => s.length >= 3);
+  return splitTaskItems(body);
+}
+
+function makeCreates(titles, dest, template = {}) {
+  return titles.slice(0, 20).map((title) =>
+    blank({
+      ...template,
+      op: 'create_task',
+      title,
+      name: '',
+      projectId: destId(dest, template.projectId),
+    }),
+  );
 }
 
 function emptyTitle(action) {
@@ -281,38 +313,18 @@ export function repairActions(actions, { prompt, catalog = {}, context = null, h
     else if (!asString(action.projectId).trim() && dest) action.projectId = destId(dest);
   };
 
-  if (creates.length && titles.length > creates.length && creates.every(emptyTitle)) {
-    const others = next.filter((a) => a.op !== 'create_task');
-    const template = creates[0] || {};
-    return [
-      ...others,
-      ...titles.map((title) =>
-        blank({
-          ...template,
-          op: 'create_task',
-          title,
-          name: '',
-          projectId: destId(dest, template.projectId),
-        }),
-      ),
-    ];
-  }
+  const others = next.filter((a) => a.op !== 'create_task');
+  const template = creates[0] || {};
+  const fatSingle =
+    creates.length === 1 &&
+    titles.length > 1 &&
+    (emptyTitle(creates[0]) || fold(creates[0].title || creates[0].name).length > fold(titles[0]).length + 10);
 
-  if (creates.length === 1 && emptyTitle(creates[0]) && titles.length > 1) {
-    const others = next.filter((a) => a.op !== 'create_task');
-    const template = creates[0];
-    return [
-      ...others,
-      ...titles.map((title) =>
-        blank({
-          ...template,
-          op: 'create_task',
-          title,
-          name: '',
-          projectId: destId(dest, template.projectId),
-        }),
-      ),
-    ];
+  if (titles.length >= 2 && (creates.length < titles.length || fatSingle)) {
+    return [...others, ...makeCreates(titles, dest, template)];
+  }
+  if (!creates.length && titles.length) {
+    return [...others, ...makeCreates(titles, dest)];
   }
 
   creates.forEach((action, i) => {

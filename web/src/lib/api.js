@@ -1,7 +1,7 @@
 import { applyAskActions, mergeActionBlocks } from './ai/runActions';
 import { buildCatalog } from './ai/catalog';
 import { inferActions, repairActions } from './ai/inferActions';
-import { heuristicReply, parseAssistantReply } from './ai/parseReply';
+import { heuristicReply, parseAssistantReply, isBlankAssistantAnswer } from './ai/parseReply';
 import { cacheInvalidateWorkspace } from './cache';
 import { coverageSeries, forecastSeries } from './dashboardExtras';
 import { STATUS_META, TODAY } from './format';
@@ -1092,12 +1092,15 @@ export const api = {
     let actions = repairActions(reply.actions || [], inferOpts);
     if (!actions.length) {
       const inferred = inferActions(prompt, inferOpts);
-      if (inferred.length) {
-        actions = inferred;
-        reply = { ...reply, answer: 'Vou aplicar isso agora.' };
-      }
+      if (inferred.length) actions = inferred;
     }
-    if (actions.length) reply = { ...reply, actions };
+    if (actions.length) {
+      reply = {
+        ...reply,
+        actions,
+        answer: isBlankAssistantAnswer(reply.answer) ? 'Vou aplicar isso agora.' : reply.answer,
+      };
+    }
     if (reply.actions?.length) {
       const applied = await applyAskActions(reply.actions, { api, catalog, context });
       if (applied.some((a) => a.ok)) cacheInvalidateWorkspace();

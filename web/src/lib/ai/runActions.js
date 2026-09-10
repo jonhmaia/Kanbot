@@ -129,6 +129,7 @@ export async function applyAskActions(actions, { api, catalog, context = null })
     sprints: [...(catalog.sprints || [])],
   };
   const results = [];
+  let askedProduct = false;
 
   for (const action of actions || []) {
     try {
@@ -284,7 +285,11 @@ export async function applyAskActions(actions, { api, catalog, context = null })
         const title = action.title || action.name;
         if (!title) throw new Error('Tarefa sem titulo');
         const project = resolveProject(action, ctx, context);
-        if (!project) throw new Error('Diga em qual produto eu crio a tarefa (ex.: a key SFR).');
+        if (!project) {
+          if (askedProduct) continue;
+          askedProduct = true;
+          throw new Error('Diga em qual produto eu crio a tarefa (ex.: a key SFR).');
+        }
         const board = resolveBoard(action, ctx, project, context);
         const column = resolveColumn({ ...action, project, board }, ctx);
         if (!column) throw new Error('Coluna nao encontrada em ' + project.key);
