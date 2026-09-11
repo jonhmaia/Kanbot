@@ -5,6 +5,7 @@ import { cacheGet, cacheSet, subscribeWorkspace } from './cache';
 export function useCached(key, fetcher) {
   const [data, setDataState] = useState(() => cacheGet(key));
   const [error, setError] = useState(null);
+  const [pending, setPending] = useState(() => cacheGet(key) == null);
 
   const setData = useCallback(
     (next) => {
@@ -18,20 +19,27 @@ export function useCached(key, fetcher) {
   );
 
   const reload = useCallback(async () => {
-    const next = await fetcher();
-    cacheSet(key, next);
-    setDataState(next);
-    setError(null);
-    return next;
+    setPending(true);
+    try {
+      const next = await fetcher();
+      cacheSet(key, next);
+      setDataState(next);
+      setError(null);
+      return next;
+    } finally {
+      setPending(false);
+    }
   }, [key, fetcher]);
 
   useEffect(() => {
     setDataState(cacheGet(key));
     setError(null);
+    setPending(cacheGet(key) == null);
   }, [key]);
 
   useEffect(() => {
     let alive = true;
+    setPending(true);
     fetcher()
       .then((next) => {
         if (!alive) return;
@@ -42,6 +50,9 @@ export function useCached(key, fetcher) {
       .catch((e) => {
         if (!alive) return;
         if (cacheGet(key) == null) setError(e);
+      })
+      .finally(() => {
+        if (alive) setPending(false);
       });
     return () => {
       alive = false;
@@ -54,5 +65,8 @@ export function useCached(key, fetcher) {
     });
   }, [reload]);
 
-  return [data, setData, reload, error];
+  const loading = data == null && !error;
+  const refreshing = pending && data != null;
+
+  return [data, setData, reload, error, { loading, refreshing, pending }];
 }

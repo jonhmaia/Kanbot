@@ -37,7 +37,7 @@ export default function TasksPage() {
   const [params] = useSearchParams();
   const { projects, members, statuses, notify, loadProjects } = useApp();
   const fetchTasks = useCallback(() => api.tasks(), []);
-  const [tasks, setTasks, reload, error] = useCached('tasks', fetchTasks);
+  const [tasks, setTasks, reload, error, status] = useCached('tasks', fetchTasks);
   const [search, setSearch] = useState(params.get('q') ?? '');
   const [status, setStatus] = useState('all');
   const [project, setProject] = useState('');
@@ -191,6 +191,7 @@ export default function TasksPage() {
     <>
       <PageHeader
         title="Tasks"
+        refreshing={status.refreshing}
         eyebrow={rows.length + ' tarefas encontradas'}
         searchValue={search}
         onSearch={setSearch}
@@ -246,7 +247,7 @@ export default function TasksPage() {
 
       <div className="px-5 pb-10 sm:px-7">
         {tasks == null ? (
-          <CachedGate error={error} onRetry={reload} flush />
+          <CachedGate error={error} onRetry={reload} flush variant="board" />
         ) : rows.length === 0 ? (
           <EmptyState title="Nada por aqui" description="Ajuste os filtros ou crie uma nova tarefa." />
         ) : view === 'board' ? (

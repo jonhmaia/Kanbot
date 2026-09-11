@@ -241,6 +241,8 @@
   }
 }
 
+/* ═══ ISLAND / NOTCH (Apple Dynamic Island Style) ═══════════════ */
+
 html.island,
 html.island body,
 html.island #root {
@@ -281,28 +283,248 @@ html.island .island-root[data-edge='chatdock'] {
   padding: 12px;
 }
 
+/* ── Shell: glassmorphism pill ────────────────────────────── */
 html.island .island-shell {
-  background: #161618;
+  background: rgba(22, 22, 24, 0.72);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  backdrop-filter: blur(40px) saturate(1.8);
   color: #f2f2f2;
   transform: translateZ(0);
   isolation: isolate;
   backface-visibility: hidden;
+  transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+              box-shadow 0.22s ease-out,
+              border-color 0.22s ease-out;
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.08),
+    0 8px 32px -8px rgba(0, 0, 0, 0.55),
+    0 2px 8px -2px rgba(0, 0, 0, 0.3);
 }
 
+/* ── Shell: border via CSS var set inline ────────────────── */
+html.island .island-shell[style*='--island-accent'] {
+  border: 0.5px solid color-mix(in srgb, var(--island-accent) 35%, transparent);
+}
+
+html.island .island-shell:hover {
+  transform: translateZ(0) scale(1.015);
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.12),
+    0 12px 40px -8px rgba(0, 0, 0, 0.6),
+    0 4px 12px -2px rgba(0, 0, 0, 0.35),
+    0 0 24px -8px color-mix(in srgb, var(--island-accent, #F5A524) 20%, transparent);
+}
+
+html.island .island-shell:active {
+  transform: translateZ(0) scale(0.99);
+}
+
+/* ── Glass overlay for expanded panels ───────────────────── */
+html.island .island-glass {
+  position: relative;
+}
+
+html.island .island-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.05) 0%, transparent 40%);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── Panel enter/exit animations ─────────────────────────── */
+html.island .island-panel-enter {
+  animation: island-panel-in 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes island-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+html.island .island-rail-enter {
+  animation: island-rail-in 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes island-rail-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Running pulse with glow ─────────────────────────────── */
 html.island .island-live {
-  animation: island-pulse 1.5s ease-in-out infinite;
+  animation: island-pulse-glow 1.8s ease-in-out infinite;
 }
 
-@keyframes island-pulse {
-  0%,
-  100% {
+@keyframes island-pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px var(--island-accent, #F5A524));
+  }
+  50% {
+    opacity: 0.6;
+    filter: drop-shadow(0 0 12px var(--island-accent, #F5A524));
+  }
+}
+
+/* ── Paused state: softer blink ──────────────────────────── */
+html.island .island-paused {
+  animation: island-paused-blink 2.2s ease-in-out infinite;
+}
+
+@keyframes island-paused-blink {
+  0%, 100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.35;
   }
+}
+
+/* ── Accent glow text ────────────────────────────────────── */
+html.island .island-glow-text {
+  text-shadow: 0 0 10px color-mix(in srgb, var(--island-accent, #F5A524) 50%, transparent);
+}
+
+/* ── Drag handle ─────────────────────────────────────────── */
+html.island .island-handle {
+  width: 2rem;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.15s ease;
+}
+
+html.island .island-handle:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Chat input focus ring ───────────────────────────────── */
+html.island .island-input:focus {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--island-accent, #F5A524) 50%, transparent);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Status dot ──────────────────────────────────────────── */
+html.island .island-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  animation: island-status-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes island-status-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+/* ── Streak dots ─────────────────────────────────────────── */
+html.island .island-streak-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  transition: background 0.15s ease;
 }
 
 .island-action {
   @apply flex items-center justify-center gap-1.5 rounded-full px-2 py-2 text-[12px] text-dust transition hover:bg-white/[0.07] hover:text-chalk;
+}
+
+/* ── Reduced motion ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  html.island .island-shell {
+    transition: none;
+  }
+  html.island .island-shell:hover {
+    transform: translateZ(0);
+  }
+  html.island .island-panel-enter,
+  html.island .island-rail-enter,
+  html.island .island-live,
+  html.island .island-paused,
+  html.island .island-status-dot {
+    animation: none;
+  }
+}
+
+.skeleton-bone {
+  background-color: rgba(255, 255, 255, 0.07);
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.1) 40%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.1) 60%,
+    transparent 80%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.skeleton-refresh {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.skeleton-refresh::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, #f5a524, transparent);
+  animation: skeleton-refresh-bar 1s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes skeleton-refresh-bar {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bone,
+  .skeleton-refresh::after {
+    animation: none;
+  }
+
+  .skeleton-bone {
+    background-image: none;
+  }
 }

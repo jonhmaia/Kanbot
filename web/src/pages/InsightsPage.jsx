@@ -1,4 +1,5 @@
 import PageHeader from '../components/layout/PageHeader';
+import { SkeletonInsights } from '../components/ui/Skeleton';
 import { Card, EmptyState } from '../components/ui/Primitives';
 import { InsightsPanel } from '../components/dashboard/AiRail';
 import { IconSpark } from '../lib/icons';
@@ -9,7 +10,7 @@ import useDashboardScope from '../lib/useDashboardScope';
 export default function InsightsPage() {
   const { projects } = useApp();
   const { focusChat } = useChat();
-  const { scope, isMaster, data, reload } = useDashboardScope();
+  const { scope, isMaster, data, reload, refreshing } = useDashboardScope();
   const project = projects.find((p) => p.id === scope);
 
   useAssistantContext('insights', {
@@ -25,6 +26,7 @@ export default function InsightsPage() {
     <>
       <PageHeader
         title="AI Insights"
+        refreshing={refreshing}
         eyebrow={
           isMaster
             ? 'Sugestoes automaticas de todos os projetos'
@@ -46,7 +48,7 @@ export default function InsightsPage() {
               <EmptyState title="Sem sugestoes" description="Tudo equilibrado por aqui no momento." />
             )
           ) : (
-            <div className="h-[300px] animate-pulseSoft rounded-3xl bg-white/[0.04]" />
+            <SkeletonInsights />
           )}
         </Card>
       </div>

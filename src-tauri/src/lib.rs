@@ -103,10 +103,29 @@ fn apply_island_layout(
     set_edge(&dock);
     ISLAND_EXPANDED.store(expanded, Ordering::SeqCst);
     let (width, height) = island_size(&dock, expanded);
-    island
-        .set_size(tauri::LogicalSize::new(width, height))
-        .map_err(|e| e.to_string())?;
-    place_island(island, &dock, width, height);
+
+    if expanded {
+        // 2-step resize for smooth expand: intermediate size first
+        let (_rail_w, rail_h) = island_size(&dock, false);
+        let mid_w = width;
+        let mid_h = rail_h + 40.0;
+        let _ = island.set_size(tauri::LogicalSize::new(mid_w, mid_h));
+        place_island(island, &dock, mid_w, mid_h);
+
+        let island_clone = island.clone();
+        let dock_clone = dock.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let _ = island_clone.set_size(tauri::LogicalSize::new(width, height));
+            place_island(&island_clone, &dock_clone, width, height);
+        });
+    } else {
+        island
+            .set_size(tauri::LogicalSize::new(width, height))
+            .map_err(|e| e.to_string())?;
+        place_island(island, &dock, width, height);
+    }
+
     if expanded {
         let _ = island.set_focus();
     }

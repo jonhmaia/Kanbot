@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import LoginCard from '../components/auth/LoginCard';
 import { Card } from '../components/ui/Primitives';
+import { Bone } from '../components/ui/Skeleton';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
 import { IconLogo } from '../lib/icons';
@@ -68,6 +69,15 @@ export default function InvitePage({ token: tokenProp, onReady }) {
 
       <Card tone="dark" className="grain w-full max-w-[420px] px-8 py-8">
         {error && !invite && <p className="text-[13px] text-rose">{error}</p>}
+        {!error && !invite && (
+          <div role="status" aria-label="Carregando convite" className="space-y-3">
+            <Bone className="h-2.5 w-16 rounded-full" />
+            <Bone className="h-7 w-48 rounded-2xl" />
+            <Bone className="h-3 w-full rounded-full" />
+            <Bone className="h-3 w-4/5 rounded-full" />
+            <Bone className="mt-4 h-11 w-full rounded-full" />
+          </div>
+        )}
         {invite && (
           <>
             <p className="text-[11px] uppercase tracking-[0.14em] text-smoke">

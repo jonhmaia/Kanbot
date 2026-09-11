@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
+import { SkeletonPage } from '../components/ui/Skeleton';
 import { StatCard, SpotlightStat } from '../components/dashboard/StatCards';
 import WorkloadSummary from '../components/dashboard/WorkloadSummary';
 import CoverageChart from '../components/dashboard/CoverageChart';
@@ -28,7 +29,7 @@ const PERIODS = [
 export default function ReportsPage() {
   const navigate = useNavigate();
   const { notify } = useApp();
-  const { scope, projectId, isMaster, data, setData, reload, error } = useDashboardScope();
+  const { scope, projectId, isMaster, data, setData, reload, error, refreshing } = useDashboardScope();
   const [period, setPeriod] = useState('week');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -119,7 +120,7 @@ export default function ReportsPage() {
         </div>
       );
     }
-    return <SkeletonReports />;
+    return <SkeletonPage variant="reports" />;
   }
   const s = data.stats;
 
@@ -127,6 +128,7 @@ export default function ReportsPage() {
     <>
       <PageHeader
         title="Reports"
+        refreshing={refreshing}
         eyebrow={isMaster ? 'Visao consolidada de entrega e capacidade' : 'Metricas deste projeto'}
         searchValue={search}
         onSearch={(v) => {
@@ -217,22 +219,3 @@ export default function ReportsPage() {
   );
 }
 
-function SkeletonReports() {
-  return (
-    <div className="grid gap-4 px-5 pb-10 pt-24 sm:px-7 xl:grid-cols-[minmax(0,1fr)_378px]">
-      <div className="flex flex-col gap-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="grid grid-cols-2 gap-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-[112px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-            ))}
-          </div>
-          <div className="h-[240px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-        </div>
-        <div className="h-[268px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-        <div className="h-[210px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-      </div>
-      <div className="h-[640px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-    </div>
-  );
-}

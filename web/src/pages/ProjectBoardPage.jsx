@@ -44,7 +44,7 @@ export default function ProjectBoardPage() {
     [projectId, boardId, sprintId],
   );
   const cacheKey = 'board:' + projectId + ':' + (boardId || 'default') + ':' + (sprintId || 'active');
-  const [board, setBoard, reload, error] = useCached(cacheKey, fetchBoard);
+  const [board, setBoard, reload, error, status] = useCached(cacheKey, fetchBoard);
   const [search, setSearch] = useState('');
   const [priority, setPriority] = useState('');
   const [assignee, setAssignee] = useState('');
@@ -267,7 +267,7 @@ export default function ProjectBoardPage() {
     }
   };
 
-  if (!board) return <CachedGate error={error} onRetry={reload} />;
+  if (!board) return <CachedGate error={error} onRetry={reload} variant="board" />;
 
   const { project } = board;
   const roster = board.members?.length ? board.members : members;
@@ -283,6 +283,7 @@ export default function ProjectBoardPage() {
     <>
       <PageHeader
         title={project.name}
+        refreshing={status.refreshing}
         eyebrow={
           <span className="flex items-center gap-1.5">
             <Link to="/projects" className="transition hover:text-dust">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
+import CachedGate from '../components/ui/CachedGate';
 import { Avatar, Card, Field, Select } from '../components/ui/Primitives';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
@@ -17,9 +18,12 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(mine ? currentUser : null);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!id) return;
+    setLoadError(null);
     api
       .getProfile(id)
       .then((row) => {
@@ -34,15 +38,14 @@ export default function ProfilePage() {
           });
         }
       })
-      .catch((e) => notify(e.message, 'warn'));
-  }, [id, mine]);
+      .catch((e) => {
+        setLoadError(e);
+        notify(e.message, 'warn');
+      });
+  }, [id, mine, retry]);
 
   if (!profile) {
-    return (
-      <div className="px-7 pt-24">
-        <div className="h-[360px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-      </div>
-    );
+    return <CachedGate error={loadError} onRetry={() => setRetry((n) => n + 1)} variant="profile" />;
   }
 
   const xp = xpProgress(profile);

@@ -6,6 +6,7 @@ import TasksLayout, {
   RedirectToTasks,
 } from './components/layout/TasksLayout';
 import { Toast } from './components/ui/Primitives';
+import { SkeletonPage } from './components/ui/Skeleton';
 import LoginPage from './pages/LoginPage';
 import InvitePage from './pages/InvitePage';
 import ProfilePage from './pages/ProfilePage';
@@ -24,16 +25,15 @@ import { ChatProvider } from './context/ChatContext';
 import { useApp } from './context/AppContext';
 
 export default function App() {
-  const { error, toast, session, loadBootstrap, currentUser } = useApp();
+  const { error, toast, session, loading, loadBootstrap, currentUser } = useApp();
   const location = useLocation();
   const inviteToken = location.pathname.startsWith('/invite/') ? location.pathname.slice('/invite/'.length).split('/')[0] : '';
 
-  if (session === undefined && !currentUser) {
+  const booting = (!currentUser && session === undefined) || (!currentUser && Boolean(session) && loading);
+  if (booting) {
     return (
       <div className="min-h-screen">
-        <div className="px-7 pt-24">
-          <div className="h-[420px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-        </div>
+        <SkeletonPage variant="boot" />
       </div>
     );
   }

@@ -28,7 +28,7 @@ export default function MasterBoardPage() {
   const navigate = useNavigate();
   const { projects, members, notify, loadProjects } = useApp();
   const fetchBoard = useCallback(() => api.masterBoard(), []);
-  const [board, setBoard, reload, error] = useCached('master-board', fetchBoard);
+  const [board, setBoard, reload, error, status] = useCached('master-board', fetchBoard);
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState([]);
   const [assignee, setAssignee] = useState('');
@@ -152,6 +152,7 @@ export default function MasterBoardPage() {
     <>
       <PageHeader
         title="Master Board"
+        refreshing={status.refreshing}
         eyebrow={total + ' tarefas de ' + projects.length + ' projetos em uma tela so'}
         searchValue={search}
         onSearch={setSearch}
@@ -208,7 +209,7 @@ export default function MasterBoardPage() {
             emptyHint="Nenhum card neste status."
           />
         ) : (
-          <CachedGate error={error} onRetry={reload} flush />
+          <CachedGate error={error} onRetry={reload} flush variant="board" />
         )}
       </div>
 

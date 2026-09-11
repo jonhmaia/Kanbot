@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
+import { SkeletonPage } from '../components/ui/Skeleton';
 import { StatCard, SpotlightStat } from '../components/dashboard/StatCards';
 import WorkloadSummary from '../components/dashboard/WorkloadSummary';
 import CoverageChart from '../components/dashboard/CoverageChart';
@@ -27,7 +28,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { notify } = useApp();
   const fetchDash = useCallback(() => api.dashboard(), []);
-  const [data, setData, reload, error] = useCached('dashboard', fetchDash);
+  const [data, setData, reload, error, status] = useCached('dashboard', fetchDash);
   const [period, setPeriod] = useState('week');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -96,7 +97,7 @@ export default function DashboardPage() {
         </div>
       );
     }
-    return <SkeletonDashboard />;
+    return <SkeletonPage variant="reports" />;
   }
   const s = data.stats;
 
@@ -104,6 +105,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
+        refreshing={status.refreshing}
         searchValue={search}
         onSearch={(v) => {
           setSearch(v);
@@ -165,22 +167,3 @@ export default function DashboardPage() {
   );
 }
 
-function SkeletonDashboard() {
-  return (
-    <div className="grid gap-4 px-5 pb-10 pt-24 sm:px-7 xl:grid-cols-[minmax(0,1fr)_378px]">
-      <div className="flex flex-col gap-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="grid grid-cols-2 gap-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-[112px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-            ))}
-          </div>
-          <div className="h-[240px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-        </div>
-        <div className="h-[268px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-        <div className="h-[210px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-      </div>
-      <div className="h-[640px] animate-pulseSoft rounded-4xl bg-white/[0.04]" />
-    </div>
-  );
-}

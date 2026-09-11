@@ -13,9 +13,11 @@ export default function PageHeader({
   onExport,
   right,
   action,
+  refreshing = false,
 }) {
   return (
-    <div className="flex flex-col gap-5 px-5 pb-6 pt-7 sm:px-7 lg:flex-row lg:items-end lg:justify-between">
+    <div className="relative flex flex-col gap-5 px-5 pb-6 pt-7 sm:px-7 lg:flex-row lg:items-end lg:justify-between">
+      {refreshing && <div className="skeleton-refresh" role="status" aria-label="Atualizando" />}
       <div className="min-w-0">
         {eyebrow && <p className="mb-1.5 text-[11.5px] uppercase tracking-[0.18em] text-smoke">{eyebrow}</p>}
         <h1 className="font-display text-[38px] font-light leading-none tracking-[-0.035em] text-chalk/85 sm:text-[42px]">

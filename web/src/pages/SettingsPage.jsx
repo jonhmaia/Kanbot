@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
 import { Avatar, Card } from '../components/ui/Primitives';
+import { Bone } from '../components/ui/Skeleton';
 import { api } from '../lib/api';
 import { useApp } from '../context/AppContext';
 import { formatFocusMinutes } from '../lib/focusSession';
@@ -39,7 +40,7 @@ function readTab() {
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { workspaces, workspaceId, members, statuses, projects, signOut, currentUser } = useApp();
-  const [boards, setBoards] = useState([]);
+  const [boards, setBoards] = useState(null);
   const [tab, setTab] = useState(readTab);
   const [inviteOpen, setInviteOpen] = useState(false);
   const workspace = workspaces.find((w) => w.id === workspaceId) || workspaces[0];
@@ -61,6 +62,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (tab !== 'workspace' || !projects.length) return;
     let cancelled = false;
+    setBoards(null);
     Promise.all(projects.map((p) => api.projectBoard(p.id).catch(() => null))).then((rows) => {
       if (!cancelled) setBoards(rows.filter(Boolean));
     });
@@ -222,7 +224,7 @@ export default function SettingsPage() {
               />
               <div className="mt-5 space-y-3">
                 {statuses.map((s) => {
-                  const mapped = boards.flatMap((b) =>
+                  const mapped = (boards || []).flatMap((b) =>
                     b.columns.filter((c) => c.statusKey === s.key).map((c) => ({ ...c, project: b.project })),
                   );
                   return (
@@ -230,10 +232,18 @@ export default function SettingsPage() {
                       <div className="flex items-center gap-2">
                         <i className="h-2 w-2 rounded-full" style={{ background: s.color }} />
                         <span className="text-[13px] text-chalk/90">{s.name}</span>
-                        <span className="ml-auto text-[11px] text-smoke">{mapped.length} colunas</span>
+                        <span className="ml-auto text-[11px] text-smoke">
+                          {boards ? mapped.length + ' colunas' : '…'}
+                        </span>
                       </div>
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {mapped.length === 0 && (
+                        {boards == null && (
+                          <>
+                            <Bone className="h-6 w-20 rounded-full" />
+                            <Bone className="h-6 w-24 rounded-full" />
+                          </>
+                        )}
+                        {boards && mapped.length === 0 && (
                           <span className="text-[11.5px] text-smoke">Nenhuma coluna usa este status.</span>
                         )}
                         {mapped.map((c) => (

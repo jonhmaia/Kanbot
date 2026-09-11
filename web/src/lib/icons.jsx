@@ -322,7 +322,9 @@ export const IconDevice = (p) => (
 
 export const IconNotch = (p) => (
   <Svg {...p}>
-    <rect x="3.5" y="8" width="17" height="8" rx="4" />
+    <rect x="3" y="7.5" width="18" height="9" rx="4.5" />
+    <circle cx="8.5" cy="12" r="1.5" fill="currentColor" />
+    <path d="M15.5 10l.6 1.2 1.2.3-1 .8.3 1.2-1.1-.6-1.1.6.3-1.2-1-.8 1.2-.3z" fill="currentColor" />
   </Svg>
 );
 

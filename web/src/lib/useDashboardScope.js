@@ -9,7 +9,7 @@ export default function useDashboardScope() {
   const scope = parseTaskLocation(pathname)?.scope || MASTER_SCOPE;
   const projectId = dashboardProjectId(scope);
   const fetchDash = useCallback(() => api.dashboard(projectId), [projectId]);
-  const [data, setData, reload, error] = useCached(dashboardCacheKey(scope), fetchDash);
+  const [data, setData, reload, error, status] = useCached(dashboardCacheKey(scope), fetchDash);
 
   return {
     scope,
@@ -19,5 +19,7 @@ export default function useDashboardScope() {
     setData,
     reload,
     error,
+    loading: status.loading,
+    refreshing: status.refreshing,
   };
 }

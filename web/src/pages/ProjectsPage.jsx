@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
+import { SkeletonPage } from '../components/ui/Skeleton';
 import { AvatarStack, Card, Dropdown, EmptyState } from '../components/ui/Primitives';
 import { ProjectSheet } from '../components/board/BoardSheets';
 import InviteSheet from '../components/project/InviteSheet';
@@ -17,7 +18,7 @@ const FILTERS = [
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
-  const { projects, members, pendingInvites, createProject, updateProject, removeProject, setTaskScope, setTaskTab, loadBootstrap, workspaces, workspaceId } = useApp();
+  const { projects, members, pendingInvites, createProject, updateProject, removeProject, setTaskScope, setTaskTab, loadBootstrap, workspaces, workspaceId, loading } = useApp();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [sheet, setSheet] = useState(null);
@@ -75,7 +76,8 @@ export default function ProjectsPage() {
     <>
       <PageHeader
         title="Projetos"
-        eyebrow={projects.length + ' projetos visiveis para voce'}
+        refreshing={loading && projects.length > 0}
+        eyebrow={loading && !projects.length ? 'Carregando seus projetos' : projects.length + ' projetos visiveis para voce'}
         searchValue={search}
         onSearch={setSearch}
         searchPlaceholder="Buscar projeto..."
@@ -110,7 +112,9 @@ export default function ProjectsPage() {
             ))}
           </div>
         )}
-        {list.length === 0 ? (
+        {loading && projects.length === 0 ? (
+          <SkeletonPage variant="projects" flush />
+        ) : list.length === 0 ? (
           <EmptyState
             title="Nenhum projeto por aqui"
             description="Crie um projeto para ganhar um kanban proprio, com colunas e limites de WIP customizaveis."

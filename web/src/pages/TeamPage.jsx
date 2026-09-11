@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
+import CachedGate from '../components/ui/CachedGate';
 import InviteSheet from '../components/project/InviteSheet';
 import { Avatar, Card } from '../components/ui/Primitives';
 import { useApp } from '../context/AppContext';
@@ -14,7 +15,7 @@ import { taskPath } from '../lib/taskScope';
 export default function TeamPage() {
   const navigate = useNavigate();
   const { projects, workspaces, workspaceId } = useApp();
-  const { scope, isMaster, data } = useDashboardScope();
+  const { scope, isMaster, data, error, reload, refreshing } = useDashboardScope();
   const [search, setSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
   const project = projects.find((p) => p.id === scope);
@@ -35,7 +36,7 @@ export default function TeamPage() {
     ),
   );
 
-  if (!data) return <div className="px-7 pt-24"><div className="h-[400px] animate-pulseSoft rounded-4xl bg-white/[0.04]" /></div>;
+  if (!data) return <CachedGate error={error} onRetry={reload} variant="team" />;
 
   const people = data.workload.filter((m) => m.name.toLowerCase().includes(search.toLowerCase()));
 
@@ -43,6 +44,7 @@ export default function TeamPage() {
     <>
       <PageHeader
         title="Team"
+        refreshing={refreshing}
         eyebrow={data.workload.length + (isMaster ? ' pessoas nos seus projetos' : ' pessoas neste projeto')}
         searchValue={search}
         onSearch={setSearch}
