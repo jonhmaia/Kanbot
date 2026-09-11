@@ -9,7 +9,7 @@ export default function WindowsDownloadCard() {
     <Card className="grain p-5">
       <h3 className="card-title">App Windows</h3>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-smoke">
-        Notch nativa e atualizacoes automaticas no desktop.
+        Notch nativa e aviso no app quando houver atualizacao.
       </p>
       <div className="mt-4">
         <WindowsDownloadButton className="btn-primary w-full justify-center" quiet />

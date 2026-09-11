@@ -2,11 +2,11 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import App from './App';
-import DesktopUpdater from './components/desktop/DesktopUpdater';
 import IslandApp from './components/island/IslandApp';
 import { AppProvider } from './context/AppContext';
 import { ChatProvider } from './context/ChatContext';
 import { FocusProvider } from './context/FocusContext';
+import { UpdateProvider } from './context/UpdateContext';
 import { isDesktop } from './lib/desktop';
 import './index.css';
 
@@ -52,8 +52,9 @@ function renderApp(isIsland) {
         <BrowserRouter>
           <AppProvider>
             <FocusProvider>
-              <DesktopUpdater />
-              <App />
+              <UpdateProvider>
+                <App />
+              </UpdateProvider>
             </FocusProvider>
           </AppProvider>
         </BrowserRouter>

@@ -10,6 +10,7 @@ import AtmospherePicker from '../components/settings/AtmospherePicker';
 import PlanPicker from '../components/settings/PlanPicker';
 import IslandPrefsCard from '../components/settings/IslandPrefsCard';
 import McpCard from '../components/settings/McpCard';
+import DesktopUpdateCard from '../components/settings/DesktopUpdateCard';
 import WindowsDownloadCard from '../components/settings/WindowsDownloadCard';
 import InviteSheet from '../components/project/InviteSheet';
 import {
@@ -172,6 +173,7 @@ export default function SettingsPage() {
                   Assistente: DeepSeek V4 Flash via OpenRouter
                 </p>
               </Card>
+              <DesktopUpdateCard />
               <WindowsDownloadCard />
             </div>
           </div>

@@ -4,6 +4,8 @@ import { IconBell, IconGrid, IconLogo, IconLogout, IconSettings, IconSwatch, Ico
 import { ATMOSPHERES } from '../../lib/atmospheres';
 import { useApp } from '../../context/AppContext';
 import AtmospherePicker from '../settings/AtmospherePicker';
+import { useUpdate } from '../../context/UpdateContext';
+import UpdateBadge from '../desktop/UpdateBadge';
 import NotchToggle from './NotchToggle';
 import { Avatar, Dropdown } from '../ui/Primitives';
 import { MenuPortal, useMenu } from '../ui/MenuPortal';
@@ -134,6 +136,8 @@ function NotificationBell() {
 }
 
 function AppLinks({ inTasks, inProjects, taskScope, className = '' }) {
+  const { available } = useUpdate();
+
   return (
     <>
       <NavLink
@@ -156,9 +160,12 @@ function AppLinks({ inTasks, inProjects, taskScope, className = '' }) {
       </NavLink>
       <NavLink
         to="/settings"
-        className={({ isActive }) => 'nav-item shrink-0 ' + className + (isActive ? ' nav-item-active' : '')}
+        className={({ isActive }) => 'nav-item relative shrink-0 ' + className + (isActive ? ' nav-item-active' : '')}
       >
         Configuracoes
+        {available && (
+          <i className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-amber" aria-hidden />
+        )}
       </NavLink>
     </>
   );
@@ -262,6 +269,7 @@ export default function TopNav() {
         </div>
 
         <div className="col-start-3 flex items-center justify-end gap-2.5">
+          <UpdateBadge />
           <NotchToggle />
           <AtmosphereMenu />
           <NotificationBell />

@@ -38,6 +38,13 @@ export const IconExport = (p) => (
   </Svg>
 );
 
+export const IconDownload = (p) => (
+  <Svg {...p}>
+    <path d="M12 3v12m0 0 3.5-3.5M12 15 8.5 11.5" />
+    <path d="M4 15v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3" />
+  </Svg>
+);
+
 export const IconChevron = (p) => (
   <Svg {...p}>
     <path d="m6 9 6 6 6-6" />
