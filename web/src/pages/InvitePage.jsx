@@ -40,8 +40,9 @@ export default function InvitePage({ token: tokenProp, onReady }) {
     setError('');
     try {
       const result = await api.acceptInvite(token);
+      if (result?.workspaceId) app.setWorkspaceId?.(result.workspaceId);
       await (onReady || app.loadBootstrap)?.();
-      navigate('/tasks/' + result.projectId, { replace: true });
+      navigate(result.projectId ? '/tasks/' + result.projectId : '/projects', { replace: true });
     } catch (e) {
       setError(e.message);
     } finally {
@@ -69,8 +70,12 @@ export default function InvitePage({ token: tokenProp, onReady }) {
         {error && !invite && <p className="text-[13px] text-rose">{error}</p>}
         {invite && (
           <>
-            <p className="text-[11px] uppercase tracking-[0.14em] text-smoke">Projeto</p>
-            <h1 className="mt-1 font-display text-[24px] tracking-tight text-chalk">{invite.projectName}</h1>
+            <p className="text-[11px] uppercase tracking-[0.14em] text-smoke">
+              {invite.kind === 'workspace' ? 'Workspace' : 'Projeto'}
+            </p>
+            <h1 className="mt-1 font-display text-[24px] tracking-tight text-chalk">
+              {invite.kind === 'workspace' ? invite.workspaceName || invite.projectName : invite.projectName}
+            </h1>
             <p className="mt-2 text-[13px] text-smoke">
               {invite.inviterName || 'Alguem'} convidou <span className="text-chalk">{invite.email}</span> como{' '}
               {roleLabel(invite.role).toLowerCase()}.

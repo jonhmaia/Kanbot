@@ -32,13 +32,27 @@ fn normalize_edge(edge: &str) -> &'static str {
     }
 }
 
-fn island_size(edge: &str, expanded: bool) -> (f64, f64) {
+/// Transparent inset around the opaque pill. WebView2 on Windows clips the
+/// first pixels of a layered HWND; without this chrome the left curve dies.
+const ISLAND_CHROME: f64 = 12.0;
+
+fn island_inner_size(edge: &str, expanded: bool) -> (f64, f64) {
     match (normalize_edge(edge), expanded) {
         (_, true) => (360.0, 560.0),
         ("chatdock", false) => (56.0, 56.0),
         ("left", false) | ("right", false) => (76.0, 248.0),
-        ("top", false) if cfg!(target_os = "macos") => (280.0, 40.0),
-        _ => (280.0, 44.0),
+        ("top", false) if cfg!(target_os = "macos") => (280.0, 38.0),
+        _ => (280.0, 40.0),
+    }
+}
+
+fn island_size(edge: &str, expanded: bool) -> (f64, f64) {
+    let (width, height) = island_inner_size(edge, expanded);
+    let chrome = ISLAND_CHROME;
+    match normalize_edge(edge) {
+        "left" | "right" => (width + chrome, height + chrome * 2.0),
+        "chatdock" => (width + chrome * 2.0, height + chrome * 2.0),
+        _ => (width + chrome * 2.0, height + chrome),
     }
 }
 
@@ -302,6 +316,9 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             if let Some(island) = app.get_webview_window("island") {
+                let _ = island.eval(
+                    "document.documentElement.classList.add('island');window.__KANBOT_ISLAND__=1;",
+                );
                 let edge = current_edge();
                 set_edge(&edge);
                 let _ = apply_island_layout(&island, false, &edge);

@@ -13,11 +13,12 @@ import { taskPath } from '../lib/taskScope';
 
 export default function TeamPage() {
   const navigate = useNavigate();
-  const { projects } = useApp();
+  const { projects, workspaces, workspaceId } = useApp();
   const { scope, isMaster, data } = useDashboardScope();
   const [search, setSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
   const project = projects.find((p) => p.id === scope);
+  const workspace = workspaces.find((w) => w.id === workspaceId) || workspaces[0];
 
   /* o assistente enxerga o time desta tela */
   useAssistantContext(
@@ -47,11 +48,9 @@ export default function TeamPage() {
         onSearch={setSearch}
         searchPlaceholder="Buscar pessoa..."
         action={
-          !isMaster && (
-            <button type="button" onClick={() => setInviteOpen(true)} className="btn-primary">
-              <IconPlus size={14} /> Convidar
-            </button>
-          )
+          <button type="button" onClick={() => setInviteOpen(true)} className="btn-primary">
+            <IconPlus size={14} /> Convidar
+          </button>
         }
       />
 
@@ -134,7 +133,12 @@ export default function TeamPage() {
         </Card>
       </div>
 
-      <InviteSheet open={inviteOpen} project={project} onClose={() => setInviteOpen(false)} />
+      <InviteSheet
+        open={inviteOpen}
+        project={isMaster ? null : project}
+        workspace={isMaster ? workspace : null}
+        onClose={() => setInviteOpen(false)}
+      />
     </>
   );
 }

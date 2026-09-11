@@ -386,11 +386,15 @@ export const api = {
 
     const ws = await workspaceId();
     const [members, currentUser, projects] = await Promise.all([
-      loadVisibleMembers(),
+      loadWorkspaceMembers(ws),
       loadMyProfile(),
       api.projects(),
     ]);
-    const people = uniqueMembers([currentUser, ...members].filter(Boolean));
+    const people = uniqueMembers([currentUser, ...members].filter(Boolean)).map((m) => {
+      if (!currentUser || m.id !== currentUser.id) return m;
+      const fromWs = members.find((row) => row.id === m.id);
+      return { ...m, workspaceRole: fromWs?.workspaceRole || m.workspaceRole };
+    });
 
     const { data: workspaces, error: wsErr } = await client.from('workspaces').select('*').order('name');
     fail(wsErr);
@@ -965,10 +969,21 @@ export const api = {
 
   listProjectMembers: async (projectId) => loadProjectMembers(projectId),
 
+  listWorkspaceMembers: async (ws) => loadWorkspaceMembers(ws),
+
   removeProjectMember: async (projectId, userId) => {
     const client = await requireSession();
     const { error } = await client.rpc('remove_project_member', {
       p_project_id: projectId,
+      p_user_id: userId,
+    });
+    fail(error);
+  },
+
+  removeWorkspaceMember: async (ws, userId) => {
+    const client = await requireSession();
+    const { error } = await client.rpc('remove_workspace_member', {
+      p_workspace_id: ws,
       p_user_id: userId,
     });
     fail(error);
@@ -985,12 +1000,36 @@ export const api = {
     return mapInvite(Array.isArray(data) ? data[0] : data);
   },
 
+  inviteToWorkspace: async (ws, email, role = 'member') => {
+    const client = await requireSession();
+    const { data, error } = await client.rpc('invite_to_workspace', {
+      p_workspace_id: ws,
+      p_email: email,
+      p_role: role,
+    });
+    fail(error);
+    return mapInvite(Array.isArray(data) ? data[0] : data);
+  },
+
   listProjectInvites: async (projectId) => {
     const client = await requireSession();
     const { data, error } = await client
       .from('invitations')
       .select('*')
       .eq('project_id', projectId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    fail(error);
+    return (data || []).map(mapInvite);
+  },
+
+  listWorkspaceInvites: async (ws) => {
+    const client = await requireSession();
+    const { data, error } = await client
+      .from('invitations')
+      .select('*')
+      .eq('workspace_id', ws)
+      .is('project_id', null)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
     fail(error);

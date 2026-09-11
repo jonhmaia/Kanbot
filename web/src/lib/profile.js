@@ -10,6 +10,8 @@ export const PROJECT_ROLES = [
   { value: 'admin', label: 'Admin' },
 ];
 
+export const WORKSPACE_ROLES = PROJECT_ROLES;
+
 export function presenceMeta(presence) {
   return PRESENCE_META[presence] || PRESENCE_META.available;
 }

@@ -248,6 +248,7 @@ html.island #root {
   background: transparent !important;
   background-image: none !important;
   background-color: transparent !important;
+  background-attachment: scroll !important;
   overflow: hidden;
 }
 
@@ -256,13 +257,36 @@ html.island body {
 }
 
 html.island .island-root {
+  box-sizing: border-box;
+  width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   color: #f2f2f2;
+}
+
+html.island .island-root[data-edge='top'] {
+  padding: 0 12px 12px;
+}
+
+html.island .island-root[data-edge='left'] {
+  padding: 12px 12px 12px 0;
+}
+
+html.island .island-root[data-edge='right'] {
+  padding: 12px 0 12px 12px;
+}
+
+html.island .island-root[data-edge='chatdock'] {
+  padding: 12px;
 }
 
 html.island .island-shell {
   background: #161618;
   color: #f2f2f2;
+  transform: translateZ(0);
+  isolation: isolate;
+  backface-visibility: hidden;
 }
 
 html.island .island-live {
@@ -273,11 +297,9 @@ html.island .island-live {
   0%,
   100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
     opacity: 0.55;
-    transform: scale(0.86);
   }
 }
 

@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { Avatar, Field, Select, Sheet } from '../ui/Primitives';
 import { api } from '../../lib/api';
 import { IconCopy, IconTrash } from '../../lib/icons';
-import { inviteUrl, PROJECT_ROLES, roleLabel } from '../../lib/profile';
+import { inviteUrl, PROJECT_ROLES, WORKSPACE_ROLES, roleLabel } from '../../lib/profile';
 import { useApp } from '../../context/AppContext';
 
-export default function InviteSheet({ open, project, onClose }) {
-  const { currentUser, notify, loadBootstrap } = useApp();
+export default function InviteSheet({ open, project, workspace, onClose }) {
+  const { currentUser, notify, loadBootstrap, workspaceId, workspaces } = useApp();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('member');
   const [busy, setBusy] = useState(false);
@@ -14,9 +14,23 @@ export default function InviteSheet({ open, project, onClose }) {
   const [invites, setInvites] = useState([]);
   const [link, setLink] = useState('');
 
-  const projectId = project?.id;
+  const workspaceMode = !project;
+  const activeWorkspace = workspace || workspaces.find((w) => w.id === workspaceId);
+  const targetWorkspaceId = project ? null : activeWorkspace?.id || workspaceId;
+  const canSubmit = workspaceMode ? Boolean(targetWorkspaceId) : Boolean(project?.id);
 
   const reload = async () => {
+    if (workspaceMode) {
+      if (!targetWorkspaceId) return;
+      const [roster, pending] = await Promise.all([
+        api.listWorkspaceMembers(targetWorkspaceId),
+        api.listWorkspaceInvites(targetWorkspaceId),
+      ]);
+      setMembers(roster);
+      setInvites(pending);
+      return;
+    }
+    const projectId = project?.id;
     if (!projectId) return;
     const [roster, pending] = await Promise.all([
       api.listProjectMembers(projectId),
@@ -27,17 +41,19 @@ export default function InviteSheet({ open, project, onClose }) {
   };
 
   useEffect(() => {
-    if (!open || !projectId) return;
+    if (!open || !canSubmit) return;
     setEmail('');
     setRole('member');
     setLink('');
     reload().catch((e) => notify(e.message, 'warn'));
-  }, [open, projectId]);
+  }, [open, project?.id, targetWorkspaceId, workspaceMode]);
 
   const invite = async () => {
     setBusy(true);
     try {
-      const row = await api.inviteToProject(projectId, email.trim(), role);
+      const row = workspaceMode
+        ? await api.inviteToWorkspace(targetWorkspaceId, email.trim(), role)
+        : await api.inviteToProject(project.id, email.trim(), role);
       const url = inviteUrl(row.token);
       setLink(url);
       setEmail('');
@@ -71,8 +87,13 @@ export default function InviteSheet({ open, project, onClose }) {
 
   const remove = async (userId) => {
     try {
-      await api.removeProjectMember(projectId, userId);
-      notify(userId === currentUser?.id ? 'Voce saiu do projeto' : 'Membro removido', 'warn');
+      if (workspaceMode) {
+        await api.removeWorkspaceMember(targetWorkspaceId, userId);
+        notify(userId === currentUser?.id ? 'Voce saiu do workspace' : 'Membro removido', 'warn');
+      } else {
+        await api.removeProjectMember(project.id, userId);
+        notify(userId === currentUser?.id ? 'Voce saiu do projeto' : 'Membro removido', 'warn');
+      }
       await reload();
       loadBootstrap();
     } catch (e) {
@@ -80,14 +101,20 @@ export default function InviteSheet({ open, project, onClose }) {
     }
   };
 
+  const memberRole = (m) => (workspaceMode ? m.workspaceRole : m.projectRole) || m.role;
+
   return (
     <Sheet
       open={open}
       onClose={onClose}
       width="sm:max-w-[480px]"
-      eyebrow={project?.key}
-      title="Convidar para o projeto"
-      subtitle="A pessoa so ve este projeto — nao os outros do seu workspace."
+      eyebrow={workspaceMode ? activeWorkspace?.name : project?.key}
+      title={workspaceMode ? 'Convidar para o workspace' : 'Convidar para o projeto'}
+      subtitle={
+        workspaceMode
+          ? 'A pessoa entra no workspace e passa a ver todos os projetos.'
+          : 'A pessoa so ve este projeto — nao os outros do seu workspace.'
+      }
     >
       <div className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-[1fr,140px]">
@@ -101,10 +128,10 @@ export default function InviteSheet({ open, project, onClose }) {
             />
           </Field>
           <Field label="Papel">
-            <Select value={role} onChange={setRole} options={PROJECT_ROLES} />
+            <Select value={role} onChange={setRole} options={workspaceMode ? WORKSPACE_ROLES : PROJECT_ROLES} />
           </Field>
         </div>
-        <button type="button" disabled={busy || !email.trim()} onClick={invite} className="btn-primary w-full justify-center">
+        <button type="button" disabled={busy || !email.trim() || !canSubmit} onClick={invite} className="btn-primary w-full justify-center">
           {busy ? 'Enviando...' : 'Gerar convite'}
         </button>
         {link && (
@@ -121,9 +148,9 @@ export default function InviteSheet({ open, project, onClose }) {
                 <Avatar member={m} size={28} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] text-chalk">{m.name}</p>
-                  <p className="truncate text-[11px] text-smoke">{roleLabel(m.projectRole || m.role)} · {m.email}</p>
+                  <p className="truncate text-[11px] text-smoke">{roleLabel(memberRole(m))} · {m.email}</p>
                 </div>
-                {m.projectRole !== 'owner' && (
+                {memberRole(m) !== 'owner' && (
                   <button
                     type="button"
                     onClick={() => remove(m.id)}

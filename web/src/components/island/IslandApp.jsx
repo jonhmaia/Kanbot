@@ -113,6 +113,11 @@ export default function IslandApp() {
   useEffect(() => {
     if (prefs.visible === false || drag.current.live) return;
     invokeDesktop('resize_island', { expanded, edge: prefs.edge });
+    const settle = window.setTimeout(() => {
+      if (drag.current.live) return;
+      invokeDesktop('resize_island', { expanded, edge: prefs.edge });
+    }, 80);
+    return () => window.clearTimeout(settle);
   }, [expanded, prefs.edge, prefs.visible]);
 
   const blocked = () => drag.current.live || Date.now() < skipClickUntil.current;
@@ -191,7 +196,7 @@ export default function IslandApp() {
   const radius = shellRadius(prefs.edge, dock);
   const shell = {
     '--island-accent': accent,
-    boxShadow: 'inset 0 0 0 1.5px ' + accent,
+    border: '1.5px solid ' + accent,
   };
 
   const focusCell = (
@@ -203,7 +208,7 @@ export default function IslandApp() {
           ? 'hidden'
           : side
             ? 'flex flex-1 flex-col items-center justify-center gap-1 px-1'
-            : 'flex min-w-0 flex-1 items-center gap-2 px-2'
+            : 'flex min-w-0 flex-1 items-center gap-2 px-3'
       }
       aria-label="Abrir foco"
     >
@@ -217,11 +222,11 @@ export default function IslandApp() {
         </>
       ) : (
         <>
-          <span className={'relative grid place-items-center ' + (running ? 'island-live' : '')}>
+          <span className={'relative grid shrink-0 place-items-center ' + (running ? 'island-live' : '')}>
             {idle ? <IconLogo size={16} /> : <i className="h-2 w-2 rounded-full" style={{ background: accent }} />}
           </span>
           {!idle && (
-            <span className="text-[13px] font-medium tabular-nums tracking-tight" style={{ color: accent }}>
+            <span className="shrink-0 text-[13px] font-medium tabular-nums tracking-tight" style={{ color: accent }}>
               {clock}
             </span>
           )}
@@ -269,7 +274,7 @@ export default function IslandApp() {
   const rail = !expanded && (
     <div
       {...dragBind}
-      className={'island-shell flex h-full w-full overflow-hidden ' + radius + (side ? ' flex-col py-2' : ' items-center')}
+      className={'island-shell flex h-full min-w-0 w-full overflow-hidden ' + radius + (side ? ' flex-col py-2' : ' items-center')}
       style={shell}
     >
       {focusCell}
@@ -388,7 +393,7 @@ export default function IslandApp() {
   );
 
   return (
-    <div className="island-root flex h-full w-full select-none">
+    <div className="island-root flex h-full min-h-0 min-w-0 w-full select-none" data-edge={prefs.edge}>
       {rail}
       {focusPanel}
       {chatPanel}

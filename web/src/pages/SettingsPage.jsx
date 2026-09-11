@@ -11,8 +11,10 @@ import PlanPicker from '../components/settings/PlanPicker';
 import IslandPrefsCard from '../components/settings/IslandPrefsCard';
 import McpCard from '../components/settings/McpCard';
 import WindowsDownloadCard from '../components/settings/WindowsDownloadCard';
+import InviteSheet from '../components/project/InviteSheet';
 import {
   IconLogout,
+  IconPlus,
   IconSettings,
   IconShield,
   IconSwatch,
@@ -38,6 +40,7 @@ export default function SettingsPage() {
   const { workspaces, workspaceId, members, statuses, projects, signOut, currentUser } = useApp();
   const [boards, setBoards] = useState([]);
   const [tab, setTab] = useState(readTab);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const workspace = workspaces.find((w) => w.id === workspaceId) || workspaces[0];
   const presence = presenceMeta(currentUser?.presence);
   const xp = xpProgress(currentUser);
@@ -249,7 +252,12 @@ export default function SettingsPage() {
             </Card>
 
             <Card className="grain h-fit p-5">
-              <CardIntro icon={IconUsers} title="Pessoas" text="Quem compartilha projeto com voce." />
+              <div className="flex items-start justify-between gap-3">
+                <CardIntro icon={IconUsers} title="Pessoas" text="Quem faz parte deste workspace." />
+                <button type="button" onClick={() => setInviteOpen(true)} className="btn-ghost shrink-0 !px-3 !py-1.5 text-[12px]">
+                  <IconPlus size={13} /> Convidar
+                </button>
+              </div>
               <div className="mt-4 space-y-1">
                 {members.length === 0 && (
                   <p className="px-2 py-6 text-center text-[12.5px] text-smoke">Ninguem alem de voce ainda.</p>
@@ -283,6 +291,8 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      <InviteSheet open={inviteOpen} workspace={workspace} onClose={() => setInviteOpen(false)} />
     </>
   );
 }

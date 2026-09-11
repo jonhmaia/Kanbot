@@ -31,10 +31,15 @@ export function mapMember(row) {
 
 export function mapInvite(row) {
   if (!row) return null;
+  const projectId = row.project_id || row.projectId || null;
+  const workspaceName = row.workspace_name || row.workspaceName || '';
   return {
     id: row.id,
-    projectId: row.project_id || row.projectId,
-    projectName: row.project_name || row.projectName || '',
+    kind: row.kind || (projectId ? 'project' : 'workspace'),
+    workspaceId: row.workspace_id || row.workspaceId || null,
+    workspaceName,
+    projectId,
+    projectName: row.project_name || row.projectName || workspaceName,
     projectColor: row.project_color || row.projectColor || '#F5A524',
     email: row.email || '',
     role: row.role || 'member',

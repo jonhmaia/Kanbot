@@ -17,11 +17,13 @@ const FILTERS = [
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
-  const { projects, members, pendingInvites, createProject, updateProject, removeProject, setTaskScope, setTaskTab, loadBootstrap } = useApp();
+  const { projects, members, pendingInvites, createProject, updateProject, removeProject, setTaskScope, setTaskTab, loadBootstrap, workspaces, workspaceId } = useApp();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [sheet, setSheet] = useState(null);
   const [invite, setInvite] = useState(null);
+  const [workspaceInvite, setWorkspaceInvite] = useState(false);
+  const workspace = workspaces.find((w) => w.id === workspaceId) || workspaces[0];
 
   const list = useMemo(
     () =>
@@ -79,9 +81,14 @@ export default function ProjectsPage() {
         searchPlaceholder="Buscar projeto..."
         right={<Dropdown value={filter} options={FILTERS} onChange={setFilter} />}
         action={
-          <button type="button" onClick={() => setSheet({})} className="btn-primary">
-            <IconPlus size={14} /> Novo projeto
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setWorkspaceInvite(true)} className="btn-ghost">
+              <IconUsers size={14} /> Convidar
+            </button>
+            <button type="button" onClick={() => setSheet({})} className="btn-primary">
+              <IconPlus size={14} /> Novo projeto
+            </button>
+          </div>
         }
       />
 
@@ -96,7 +103,7 @@ export default function ProjectsPage() {
                 className="flex w-full items-center justify-between rounded-2xl border border-amber/30 bg-amber/[0.07] px-4 py-3 text-left"
               >
                 <span className="text-[13px] text-chalk">
-                  Convite para <strong>{inv.projectName}</strong>
+                  Convite para <strong>{inv.kind === 'workspace' ? inv.workspaceName || inv.projectName : inv.projectName}</strong>
                 </span>
                 <span className="text-[12px] text-amber">Aceitar</span>
               </button>
@@ -229,6 +236,7 @@ export default function ProjectsPage() {
 
       <ProjectSheet open={!!sheet} project={sheet?.project} onClose={() => setSheet(null)} onSave={save} />
       <InviteSheet open={!!invite} project={invite} onClose={() => { setInvite(null); loadBootstrap(); }} />
+      <InviteSheet open={workspaceInvite} workspace={workspace} onClose={() => { setWorkspaceInvite(false); loadBootstrap(); }} />
     </>
   );
 }
