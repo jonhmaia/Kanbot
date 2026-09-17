@@ -41,8 +41,7 @@ export default function PomodoroCard() {
     <Card className="grain p-5 sm:p-6">
       <h3 className="card-title">Tempos e regras</h3>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-smoke">
-        O app e a unica fonte do timer. O notch so espelha — pause, pule ou encerre de qualquer
-        lado que o outro segue.
+        Pause, pule ou encerre pela barra de foco ou pelas configuracoes abaixo.
       </p>
 
       <div className="mt-5 flex flex-wrap gap-2">

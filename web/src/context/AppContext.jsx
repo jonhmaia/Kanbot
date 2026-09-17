@@ -5,8 +5,6 @@ import { draftProject } from '../lib/optimistic';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { applyAtmosphere, isAtmosphereId, persistAtmosphere, readAtmosphereId } from '../lib/atmospheres';
 import { normalizePlan } from '../lib/plans';
-import { persistIslandProject } from '../lib/islandPrefs';
-import { isIslandWindow } from '../lib/desktop';
 import { setPrefUser } from '../lib/userPrefs';
 import { DEFAULT_TAB, MASTER_SCOPE, TASK_SCOPE_KEY, TASK_TAB_KEY } from '../lib/taskScope';
 
@@ -155,16 +153,6 @@ export function AppProvider({ children }) {
     if (!projects.some((p) => p.id === taskScope)) setTaskScope(MASTER_SCOPE);
   }, [projects, taskScope, setTaskScope]);
 
-  useEffect(() => {
-    if (isIslandWindow()) return;
-    if (taskScope === MASTER_SCOPE) {
-      persistIslandProject({ id: null, color: null });
-      return;
-    }
-    const project = projects.find((p) => p.id === taskScope);
-    persistIslandProject(project ? { id: project.id, color: project.color } : { id: null, color: null });
-  }, [projects, taskScope]);
-
   const createProject = useCallback(
     async (payload) => {
       const draft = draftProject(payload, workspaceId);
@@ -269,7 +257,6 @@ export function AppProvider({ children }) {
     await api.signOut();
     setPrefUser(null);
     cacheClear();
-    persistIslandProject({ id: null, color: null });
     setBoot(null);
     setProjects([]);
     setSession(null);

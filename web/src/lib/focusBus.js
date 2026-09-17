@@ -1,7 +1,6 @@
 import { emitDesktop, listenDesktop } from './desktop';
 
 export const FOCUS_BUS = 'kanbot-focus';
-export const ISLAND_PREFS_BUS = 'kanbot-island-prefs';
 
 export function publishFocusBus(payload) {
   try {
@@ -21,28 +20,6 @@ export function subscribeFocusBus(handler) {
   });
   return () => {
     window.removeEventListener(FOCUS_BUS, onWindow);
-    stopDesktop();
-  };
-}
-
-export function publishIslandPrefsBus(prefs) {
-  try {
-    window.dispatchEvent(new CustomEvent(ISLAND_PREFS_BUS, { detail: prefs }));
-  } catch {
-    /* ignore */
-  }
-  emitDesktop(ISLAND_PREFS_BUS, prefs).catch(() => {});
-}
-
-export function subscribeIslandPrefsBus(handler) {
-  const onWindow = (event) => handler(event.detail);
-  window.addEventListener(ISLAND_PREFS_BUS, onWindow);
-  let stopDesktop = () => {};
-  listenDesktop(ISLAND_PREFS_BUS, (event) => handler(event?.payload)).then((unlisten) => {
-    stopDesktop = unlisten;
-  });
-  return () => {
-    window.removeEventListener(ISLAND_PREFS_BUS, onWindow);
     stopDesktop();
   };
 }

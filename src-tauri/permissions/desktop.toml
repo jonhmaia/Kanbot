@@ -4,13 +4,5 @@ description = "Comandos do app desktop Kanbot"
 commands.allow = [
   "show_main",
   "hide_main",
-  "quit_app",
-  "hide_island",
-  "show_island",
-  "position_island",
-  "resize_island",
-  "start_drag_island",
-  "snap_island",
-  "open_chat",
-  "capture_screen"
+  "quit_app"
 ]
