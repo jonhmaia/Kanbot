@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useApp } from './AppContext';
-import { isDesktop, isIslandWindow, invokeDesktop } from '../lib/desktop';
-import { publishFocusBus, subscribeFocusBus, subscribeIslandPrefsBus } from '../lib/focusBus';
+import { publishFocusBus, subscribeFocusBus } from '../lib/focusBus';
 import { setPrefUser } from '../lib/userPrefs';
 import {
   FOCUS_DAYS_KEY,
@@ -33,34 +32,20 @@ import {
   writeFocus,
   writeFocusSetup,
 } from '../lib/focusSession';
-import {
-  ISLAND_KEY,
-  ISLAND_PROJECT_KEY,
-  persistIslandPrefs,
-  readIslandPrefs,
-  readIslandProject,
-  resolveIslandAccent,
-} from '../lib/islandPrefs';
 
 const FocusContext = createContext(null);
-const isMirror = typeof window !== 'undefined' && isIslandWindow();
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function sameJson(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function applyIslandChrome(prefs) {
-  if (!isDesktop() || isMirror) return;
-  invokeDesktop(prefs.visible ? 'show_island' : 'hide_island');
-  if (prefs.visible) invokeDesktop('resize_island', { expanded: false, edge: prefs.edge });
+function focusAccent(activeTask) {
+  const color = activeTask?.projectColor;
+  if (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) return color;
+  return 'var(--accent, #F5A524)';
 }
 
 function cuePhase(phase, minutes, settings) {
-  if (isMirror) return;
   if (settings?.sound) playFocusCue(phase);
   if (settings?.desktopNotify) notifyFocusPhase(phase, minutes);
 }
@@ -68,8 +53,6 @@ function cuePhase(phase, minutes, settings) {
 export function FocusProvider({ children }) {
   const { session: authSession, refreshCurrentUser } = useApp();
   const userId = authSession?.user?.id || null;
-  const [prefs, setPrefs] = useState(readIslandPrefs);
-  const [islandProject, setIslandProject] = useState(readIslandProject);
   const [pomodoro, setPomodoro] = useState(readPomodoro);
   const [session, setSession] = useState(readFocus);
   const [pendingTasks, setPendingTasks] = useState(readFocusSetup);
@@ -82,26 +65,21 @@ export function FocusProvider({ children }) {
   sessionRef.current = session;
 
   const hydrate = useCallback(() => {
-    const nextPrefs = readIslandPrefs();
-    const nextProject = readIslandProject();
     const nextPomodoro = readPomodoro();
     const nextSetup = readFocusSetup();
     const nextHistory = readFocusHistory();
     const nextDays = readFocusDays();
     const nextFocus = readFocus();
-    setPrefs((current) => (sameJson(current, nextPrefs) ? current : nextPrefs));
-    setIslandProject((current) => (sameJson(current, nextProject) ? current : nextProject));
-    setPomodoro((current) => (sameJson(current, nextPomodoro) ? current : nextPomodoro));
-    setPendingTasks((current) => (sameJson(current, nextSetup) ? current : nextSetup));
-    setHistory((current) => (sameJson(current, nextHistory) ? current : nextHistory));
-    setDays((current) => (sameJson(current, nextDays) ? current : nextDays));
+    setPomodoro((current) => (JSON.stringify(current) === JSON.stringify(nextPomodoro) ? current : nextPomodoro));
+    setPendingTasks((current) => (JSON.stringify(current) === JSON.stringify(nextSetup) ? current : nextSetup));
+    setHistory((current) => (JSON.stringify(current) === JSON.stringify(nextHistory) ? current : nextHistory));
+    setDays((current) => (JSON.stringify(current) === JSON.stringify(nextDays) ? current : nextDays));
     if (sessionStamp(nextFocus) !== sessionStamp(sessionRef.current)) setSession(nextFocus);
   }, []);
 
   useEffect(() => {
     setPrefUser(userId);
     hydrate();
-    if (!isMirror) applyIslandChrome(readIslandPrefs());
     if (!userId) return;
     api.listFocusHistory().then((rows) => {
       if (rows?.length) setHistory(rows);
@@ -114,7 +92,6 @@ export function FocusProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const syncProject = () => setIslandProject(readIslandProject());
     const onStorage = (e) => {
       if (!e.key || !e.key.startsWith('kanbot:')) return;
       if (e.key.startsWith(FOCUS_KEY) && !e.key.startsWith(FOCUS_SETUP_KEY) && !e.key.startsWith(FOCUS_DAYS_KEY) && !e.key.startsWith(FOCUS_HISTORY_KEY)) {
@@ -122,25 +99,12 @@ export function FocusProvider({ children }) {
         if (sessionStamp(next) !== sessionStamp(sessionRef.current)) setSession(next);
       }
       if (e.key.startsWith(FOCUS_SETUP_KEY)) setPendingTasks(readFocusSetup());
-      if (e.key.startsWith(ISLAND_KEY) && !e.key.startsWith(ISLAND_PROJECT_KEY)) setPrefs(readIslandPrefs());
-      if (e.key.startsWith(ISLAND_PROJECT_KEY)) syncProject();
       if (e.key.startsWith(FOCUS_SETTINGS_KEY)) setPomodoro(readPomodoro());
       if (e.key.startsWith(FOCUS_DAYS_KEY)) setDays(readFocusDays());
       if (e.key.startsWith(FOCUS_HISTORY_KEY)) setHistory(readFocusHistory());
     };
     window.addEventListener('storage', onStorage);
-    window.addEventListener('kanbot-island-project', syncProject);
-    let stopDesktop = () => {};
-    import('../lib/desktop').then(({ listenDesktop }) =>
-      listenDesktop('island-project', syncProject).then((unlisten) => {
-        stopDesktop = unlisten;
-      }),
-    );
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener('kanbot-island-project', syncProject);
-      stopDesktop();
-    };
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   useEffect(() => {
@@ -159,25 +123,12 @@ export function FocusProvider({ children }) {
         setPomodoro(payload.settings);
         return;
       }
-      if (payload.kind === 'command' && !isMirror && payload.action === 'skip') {
+      if (payload.kind === 'command' && payload.action === 'skip') {
         completePhaseRef.current({ skip: true });
       }
     });
-    const stopPrefs = subscribeIslandPrefsBus((next) => {
-      if (!next) return;
-      setPrefs(next);
-    });
-    return () => {
-      stopFocus();
-      stopPrefs();
-    };
+    return () => stopFocus();
   }, []);
-
-  useEffect(() => {
-    if (!isDesktop()) return;
-    const id = setInterval(hydrate, 1000);
-    return () => clearInterval(id);
-  }, [hydrate]);
 
   const commit = useCallback((next) => {
     writeFocus(next);
@@ -192,7 +143,6 @@ export function FocusProvider({ children }) {
     writeFocusSetup(list);
     setPendingTasks(list);
     publishFocusBus({ kind: 'setup', tasks: list });
-    if (isMirror) invokeDesktop('show_main');
   }, []);
 
   const dismissSetup = useCallback(() => {
@@ -310,7 +260,6 @@ export function FocusProvider({ children }) {
 
   const completePhase = useCallback(
     async ({ skip = false } = {}) => {
-      if (isMirror) return;
       const current = readFocus();
       if (current.status === 'idle') return;
       const left = remainingMs(current);
@@ -383,29 +332,16 @@ export function FocusProvider({ children }) {
   );
 
   const skipPhase = useCallback(() => {
-    if (isMirror) {
-      publishFocusBus({ kind: 'command', action: 'skip' });
-      return;
-    }
     completePhase({ skip: true });
   }, [completePhase]);
 
   completePhaseRef.current = completePhase;
 
   useEffect(() => {
-    if (isMirror) return;
     if (session.status !== 'running') return;
     if (remainingMs(session, now) > 0) return;
     completePhase();
   }, [session, now, completePhase]);
-
-  const setIslandPrefs = useCallback((patch) => {
-    const prev = readIslandPrefs();
-    const next = persistIslandPrefs(patch);
-    setPrefs(next);
-    if (next.visible !== prev.visible || next.edge !== prev.edge) applyIslandChrome(next);
-    return next;
-  }, []);
 
   const setPomodoroSettings = useCallback(
     (patch, { applyCurrent = false } = {}) => {
@@ -421,12 +357,9 @@ export function FocusProvider({ children }) {
 
   const left = remainingMs(session, now);
   const activeTask = currentTask(session);
-  const accent = resolveIslandAccent(prefs, islandProject.color || activeTask?.projectColor);
+  const accent = focusAccent(activeTask);
   const value = useMemo(
     () => ({
-      prefs,
-      setIslandPrefs,
-      projectColor: islandProject.color,
       accent,
       pomodoro,
       setPomodoroSettings,
@@ -453,9 +386,6 @@ export function FocusProvider({ children }) {
       switchTask,
     }),
     [
-      prefs,
-      setIslandPrefs,
-      islandProject,
       accent,
       activeTask,
       pomodoro,

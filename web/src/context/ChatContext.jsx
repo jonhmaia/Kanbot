@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { persistChatThread, readChatThread, subscribeChatBus, focusFromApplied } from '../lib/chatBus';
-import { listenDesktop } from '../lib/desktop';
 import { contextChips, contextLabel, contextPayload, mergeContext, routeContext } from '../lib/ai/context';
 import { useApp } from './AppContext';
 import { useFocus } from './FocusContext';
@@ -15,7 +14,7 @@ function sameThread(a, b) {
 
 /**
  * Assistente unico do Kanbot. Uma so conversa, aberta pelo botao do assistente
- * ou pela Notch, sempre ciente da tela atual e da tarefa aberta.
+ * sempre ciente da tela atual e da tarefa aberta.
  */
 export function ChatProvider({ children }) {
   const { loadProjects, loadBootstrap, notify, currentUser, projects } = useApp();
@@ -93,7 +92,7 @@ export function ChatProvider({ children }) {
       persistChatThread({ messages: pending, suggested, threadFocus });
       setThinking(true);
       try {
-        const payload = contextPayload(context) || { screen: 'desktop', screenLabel: 'Notch' };
+        const payload = contextPayload(context) || { screen: 'app', screenLabel: 'Kanbot' };
         if (image) payload.watchingScreen = true;
         const res = await api.ask(asked, history, payload, image);
         const nextFocus = focusFromApplied(res.applied, projects, threadFocus);
@@ -150,21 +149,6 @@ export function ChatProvider({ children }) {
     setThreadFocus(null);
     persistChatThread({ messages: [], suggested: null, threadFocus: null });
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let stop = () => {};
-    listenDesktop('kanbot-open-chat', () => {
-      focusChat();
-    }).then((unlisten) => {
-      if (cancelled) unlisten();
-      else stop = unlisten;
-    });
-    return () => {
-      cancelled = true;
-      stop();
-    };
-  }, [focusChat]);
 
   const valueBag = {
     open,

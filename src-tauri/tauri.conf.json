@@ -19,26 +19,6 @@
         "minWidth": 960,
         "minHeight": 640,
         "visible": true
-      },
-      {
-        "label": "island",
-        "title": "Kanbot",
-        "url": "index.html?island=1",
-        "width": 304,
-        "height": 52,
-        "resizable": false,
-        "maximizable": false,
-        "minimizable": false,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "shadow": false,
-        "fullscreen": false,
-        "focus": false,
-        "visible": true,
-        "visibleOnAllWorkspaces": true,
-        "backgroundColor": "#00000000"
       }
     ],
     "security": {

@@ -9,7 +9,6 @@ import { formatFocusMinutes } from '../lib/focusSession';
 import { presenceMeta, xpProgress } from '../lib/profile';
 import AtmospherePicker from '../components/settings/AtmospherePicker';
 import PlanPicker from '../components/settings/PlanPicker';
-import IslandPrefsCard from '../components/settings/IslandPrefsCard';
 import McpCard from '../components/settings/McpCard';
 import DesktopUpdateCard from '../components/settings/DesktopUpdateCard';
 import WindowsDownloadCard from '../components/settings/WindowsDownloadCard';
@@ -193,7 +192,6 @@ export default function SettingsPage() {
                 <AtmospherePicker />
               </div>
             </Card>
-            <IslandPrefsCard />
           </div>
         )}
 

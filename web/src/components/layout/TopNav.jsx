@@ -6,7 +6,6 @@ import { useApp } from '../../context/AppContext';
 import AtmospherePicker from '../settings/AtmospherePicker';
 import { useUpdate } from '../../context/UpdateContext';
 import UpdateBadge from '../desktop/UpdateBadge';
-import NotchToggle from './NotchToggle';
 import { Avatar, Dropdown } from '../ui/Primitives';
 import { MenuPortal, useMenu } from '../ui/MenuPortal';
 import { relativeTime } from '../../lib/format';
@@ -270,7 +269,6 @@ export default function TopNav() {
 
         <div className="col-start-3 flex items-center justify-end gap-2.5">
           <UpdateBadge />
-          <NotchToggle />
           <AtmosphereMenu />
           <NotificationBell />
           <AccountMenu />

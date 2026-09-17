@@ -1,7 +1,7 @@
 {
   "identifier": "default",
-  "description": "Janela principal e ilha do Kanbot",
-  "windows": ["main", "island"],
+  "description": "Janela principal do Kanbot",
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
